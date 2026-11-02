@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env*
+!.env.example
+!.env.development.example
+!.env.production.example
+private-storage/
+*.p12
+*.pfx
+*.tsbuildinfo
+coverage/
+.npm-cache/
