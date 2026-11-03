@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "check:imports": "node scripts/check-imports.mjs",
+    "prebuild": "node scripts/check-imports.mjs",
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "node scripts/start-production.mjs",

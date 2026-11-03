@@ -10,3 +10,10 @@ private-storage/
 *.tsbuildinfo
 coverage/
 .npm-cache/
+/tmp/
+/output/
+/client_secret*.json
+/service-account*.json
+/*-service-account*.json
+/google-credentials*.json
+/price-list-koperasi-*.json
