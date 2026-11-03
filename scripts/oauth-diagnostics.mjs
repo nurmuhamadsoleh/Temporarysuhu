@@ -1,6 +1,7 @@
 import nextEnv from "@next/env";
 import { lookup } from "node:dns/promises";
 import { GOOGLE_CALLBACK_PATH } from "../src/config/app-origin.mjs";
+import { STARTUP_POLICY } from "../src/lib/server/startup-diagnostics.mjs";
 import {
   validateAuthEnvironment,
   ConfigurationError,
@@ -12,7 +13,11 @@ nextEnv.loadEnvConfig(process.cwd(), false, {
     console.error("ENV_LOAD_FAILED");
   },
 });
-const report = { at: new Date().toISOString(), checks: [] };
+const report = {
+  at: new Date().toISOString(),
+  startupPolicy: STARTUP_POLICY,
+  checks: [],
+};
 try {
   const config = validateAuthEnvironment();
   const hostname = new URL(config.origin).hostname;

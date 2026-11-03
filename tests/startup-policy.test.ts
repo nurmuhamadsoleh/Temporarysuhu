@@ -16,6 +16,7 @@ vi.mock("@/lib/server/signing-service", () => ({
   loadSigningCertificate: m.certificate,
 }));
 import { validateStartup } from "@/lib/server/startup";
+import { STARTUP_POLICY } from "@/lib/server/startup-diagnostics.mjs";
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("NODE_ENV", "production");
@@ -53,6 +54,10 @@ it("boots with auth configuration while missing database/storage/signing cannot 
   expect(m.certificate).not.toHaveBeenCalled();
   expect(entries()).toEqual(
     expect.arrayContaining([
+      expect.objectContaining({
+        component: "authentication",
+        policy: STARTUP_POLICY,
+      }),
       expect.objectContaining({
         component: "google_sheets",
         severity: "WARNING",

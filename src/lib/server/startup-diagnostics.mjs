@@ -1,3 +1,4 @@
+export const STARTUP_POLICY = "optional-legacy-canonical-hybrid-v1";
 const components = {
   authentication: "Authentication configuration",
   google_sheets: "Google Sheets",
@@ -56,6 +57,7 @@ export function startupDiagnostic(
   const entry = {
     at: new Date().toISOString(),
     event: "startup_check",
+    policy: STARTUP_POLICY,
     component,
     status,
     severity,

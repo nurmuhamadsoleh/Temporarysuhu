@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { UIProvider } from "@/components/layout/UIProvider";
 import "./globals.css";
+export const runtime = "nodejs";
 export const metadata: Metadata = {
   title: "TempControl — Monitoring Suhu",
   description: "Monitoring Suhu Chiller & Freezer untuk operasional dapur",
