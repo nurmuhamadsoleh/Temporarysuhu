@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
   turbopack: { root: process.cwd() },
   outputFileTracingExcludes: {
     "/*": [
@@ -7,6 +9,13 @@ const config: NextConfig = {
       "./private-storage/**/*",
       "./tests/**/*",
       "./docs/**/*",
+      "./tmp/**/*",
+      "./output/**/*",
+      "./client_secret*.json",
+      "./service-account*.json",
+      "./*-service-account*.json",
+      "./google-credentials*.json",
+      "./price-list-koperasi-*.json",
       "./.env*",
       "./**/*.p12",
       "./**/*.pfx",
@@ -25,7 +34,10 @@ const config: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "same-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          ...(process.env.APP_ENV === "production"
+          ...(process.env.APP_ENV === "production" &&
+          (process.env.AUTH_URL || process.env.NEXTAUTH_URL || "").startsWith(
+            "https://",
+          )
             ? [{ key: "Strict-Transport-Security", value: "max-age=31536000" }]
             : []),
           {

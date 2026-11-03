@@ -24,7 +24,14 @@ export async function readLimited(req: Request, max = 65536) {
 }
 export async function readJson(req: Request): Promise<unknown> {
   try {
-    return JSON.parse((await readLimited(req)).toString("utf8"));
+    return JSON.parse(
+      (await readLimited(req)).toString("utf8"),
+      (key, value) => {
+        if (["__proto__", "prototype", "constructor"].includes(key))
+          throw new AppError(400, "Properti JSON tidak diizinkan");
+        return value;
+      },
+    );
   } catch (e) {
     if (e instanceof AppError) throw e;
     throw new AppError(400, "JSON request tidak valid");

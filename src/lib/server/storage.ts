@@ -13,6 +13,14 @@ export const storageRoot = () => {
       "./private-storage",
   );
 };
+function filePath(name: string) {
+  if (
+    !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/.test(name) ||
+    /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)
+  )
+    throw new Error("Invalid file");
+  return path.join(storageRoot(), name);
+}
 export async function locked<T>(fn: () => Promise<T>): Promise<T> {
   const root = storageRoot();
   await mkdir(root, { recursive: true, mode: 0o700 });
@@ -29,18 +37,13 @@ export async function locked<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 export async function putFile(name: string, data: Buffer | string) {
+  const destination = filePath(name);
   const root = storageRoot();
   await mkdir(root, { recursive: true, mode: 0o700 });
   const tmp = path.join(root, `${name}.${crypto.randomUUID()}.tmp`);
   await writeFile(tmp, data, { mode: 0o600, flag: "wx" });
-  await rename(tmp, path.join(/* turbopackIgnore: true */ root, name));
+  await rename(tmp, /* turbopackIgnore: true */ destination);
 }
 export async function getFile(name: string) {
-  if (!/^[a-zA-Z0-9._-]+$/.test(name)) throw new Error("Invalid file");
-  return readFile(
-    /* turbopackIgnore: true */ path.join(
-      /* turbopackIgnore: true */ storageRoot(),
-      name,
-    ),
-  );
+  return readFile(/* turbopackIgnore: true */ filePath(name));
 }

@@ -1,0 +1,50 @@
+{
+  "mode": "anonymous local production TLS QA",
+  "results": [
+    {
+      "path": "/api/users",
+      "status": 401,
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/users/pending",
+      "status": 401,
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/temperatures/chiller",
+      "status": 401,
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/temperatures/freezer",
+      "status": 401,
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/reports",
+      "status": 401,
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/reports/control",
+      "status": 401,
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/dashboard/stats",
+      "status": 401,
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/signatures/11111111-1111-4111-8111-111111111111",
+      "status": 401,
+      "cache": "no-store"
+    },
+    {
+      "path": "/api/reports/11111111-1111-4111-8111-111111111111/download",
+      "status": 401,
+      "cache": "no-store"
+    }
+  ]
+}

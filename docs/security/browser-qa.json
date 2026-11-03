@@ -1,0 +1,92 @@
+{
+  "checkedAt": "2026-11-03T05:33:07.093Z",
+  "mode": "isolated local production runtime; anonymous; TEST ONLY localhost TLS",
+  "results": [
+    {
+      "route": "/login",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "status": 200,
+      "csp": "default-src 'self'; script-src 'self' 'nonce-7JIaMmrn3dOVF5f3wrDdAQ==' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests",
+      "hsts": "max-age=31536000",
+      "poweredBy": null,
+      "nonceMatches": true,
+      "googleButtonReady": true,
+      "violations": [],
+      "overflow": false,
+      "buttons": [
+        {
+          "label": "Masuk dengan Google",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/register",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "status": 200,
+      "csp": "default-src 'self'; script-src 'self' 'nonce-QTwtosUZBTaDZBiJ5hwgWA==' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests",
+      "hsts": "max-age=31536000",
+      "poweredBy": null,
+      "nonceMatches": true,
+      "googleButtonReady": true,
+      "violations": [],
+      "overflow": false,
+      "buttons": [
+        {
+          "label": "Daftar dengan Google",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/login",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "status": 200,
+      "csp": "default-src 'self'; script-src 'self' 'nonce-lfamMrKMW4S1cW4pWsnuHg==' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests",
+      "hsts": "max-age=31536000",
+      "poweredBy": null,
+      "nonceMatches": true,
+      "googleButtonReady": true,
+      "violations": [],
+      "overflow": false,
+      "buttons": [
+        {
+          "label": "Masuk dengan Google",
+          "disabled": false
+        }
+      ]
+    },
+    {
+      "route": "/register",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "status": 200,
+      "csp": "default-src 'self'; script-src 'self' 'nonce-CjtWwNv0h6GQWvSnImqGHg==' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests",
+      "hsts": "max-age=31536000",
+      "poweredBy": null,
+      "nonceMatches": true,
+      "googleButtonReady": true,
+      "violations": [],
+      "overflow": false,
+      "buttons": [
+        {
+          "label": "Daftar dengan Google",
+          "disabled": false
+        }
+      ]
+    }
+  ],
+  "pdfBlobViolations": [],
+  "errors": []
+}

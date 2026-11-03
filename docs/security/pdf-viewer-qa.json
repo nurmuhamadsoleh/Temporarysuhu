@@ -1,0 +1,23 @@
+{
+  "errors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "frames": [
+    {
+      "url": "https://127.0.0.1:3122/login",
+      "body": ""
+    },
+    {
+      "url": "blob:https://127.0.0.1:3122/826b3cba-301b-43a7-ad32-7e9e21fb390c",
+      "body": ""
+    },
+    {
+      "url": "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
+      "body": ""
+    },
+    {
+      "url": "blob:https://127.0.0.1:3122/826b3cba-301b-43a7-ad32-7e9e21fb390c",
+      "body": ""
+    }
+  ]
+}

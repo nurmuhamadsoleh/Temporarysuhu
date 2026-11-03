@@ -1,0 +1,902 @@
+[
+  {
+    "route": "/login",
+    "width": 320,
+    "height": 568,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 305,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 320,
+    "height": 568,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 305,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 320,
+    "height": 568,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 305,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 320,
+    "height": 568,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 305,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 320,
+    "height": 568,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 305,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 320,
+    "height": 568,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 305,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 320,
+    "height": 568,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 305,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 320,
+    "height": 568,
+    "heading": "Laporan monitoring",
+    "pageWidth": 305,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 320,
+    "height": 568,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 305,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 320,
+    "height": 568,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 305,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 360,
+    "height": 800,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 345,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 360,
+    "height": 800,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 345,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 360,
+    "height": 800,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 345,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 360,
+    "height": 800,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 345,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 360,
+    "height": 800,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 345,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 360,
+    "height": 800,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 345,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 360,
+    "height": 800,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 345,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 360,
+    "height": 800,
+    "heading": "Laporan monitoring",
+    "pageWidth": 345,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 360,
+    "height": 800,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 345,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 360,
+    "height": 800,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 345,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 375,
+    "height": 812,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 360,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 375,
+    "height": 812,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 360,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 375,
+    "height": 812,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 360,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 375,
+    "height": 812,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 360,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 375,
+    "height": 812,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 360,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 375,
+    "height": 812,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 360,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 375,
+    "height": 812,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 360,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 375,
+    "height": 812,
+    "heading": "Laporan monitoring",
+    "pageWidth": 360,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 375,
+    "height": 812,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 360,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 375,
+    "height": 812,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 360,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 390,
+    "height": 844,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 375,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 390,
+    "height": 844,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 375,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 390,
+    "height": 844,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 375,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 390,
+    "height": 844,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 375,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 390,
+    "height": 844,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 375,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 390,
+    "height": 844,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 375,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 390,
+    "height": 844,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 375,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 390,
+    "height": 844,
+    "heading": "Laporan monitoring",
+    "pageWidth": 375,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 390,
+    "height": 844,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 375,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 390,
+    "height": 844,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 375,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 430,
+    "height": 932,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 415,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 430,
+    "height": 932,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 415,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 430,
+    "height": 932,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 415,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 430,
+    "height": 932,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 415,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 430,
+    "height": 932,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 415,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 430,
+    "height": 932,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 415,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 430,
+    "height": 932,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 415,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 430,
+    "height": 932,
+    "heading": "Laporan monitoring",
+    "pageWidth": 415,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 430,
+    "height": 932,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 415,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 430,
+    "height": 932,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 415,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 768,
+    "height": 1024,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 753,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 768,
+    "height": 1024,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 753,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 768,
+    "height": 1024,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 753,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 768,
+    "height": 1024,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 753,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 768,
+    "height": 1024,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 753,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 768,
+    "height": 1024,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 753,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 768,
+    "height": 1024,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 753,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 768,
+    "height": 1024,
+    "heading": "Laporan monitoring",
+    "pageWidth": 753,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 768,
+    "height": 1024,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 753,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 768,
+    "height": 1024,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 753,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 1024,
+    "height": 768,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1009,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 1024,
+    "height": 768,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1009,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 1024,
+    "height": 768,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1009,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 1024,
+    "height": 768,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1009,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 1024,
+    "height": 768,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 1009,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 1024,
+    "height": 768,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 1009,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 1024,
+    "height": 768,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 1009,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 1024,
+    "height": 768,
+    "heading": "Laporan monitoring",
+    "pageWidth": 1009,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 1024,
+    "height": 768,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 1009,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 1024,
+    "height": 768,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 1009,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 1280,
+    "height": 800,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1265,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 1280,
+    "height": 800,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1265,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 1280,
+    "height": 800,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1265,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 1280,
+    "height": 800,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1265,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 1280,
+    "height": 800,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 1265,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 1280,
+    "height": 800,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 1265,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 1280,
+    "height": 800,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 1265,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 1280,
+    "height": 800,
+    "heading": "Laporan monitoring",
+    "pageWidth": 1265,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 1280,
+    "height": 800,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 1265,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 1280,
+    "height": 800,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 1265,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 1440,
+    "height": 900,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1425,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 1440,
+    "height": 900,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1425,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 1440,
+    "height": 900,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1425,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 1440,
+    "height": 900,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1425,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 1440,
+    "height": 900,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 1425,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 1440,
+    "height": 900,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 1425,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 1440,
+    "height": 900,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 1425,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 1440,
+    "height": 900,
+    "heading": "Laporan monitoring",
+    "pageWidth": 1425,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 1440,
+    "height": 900,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 1425,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 1440,
+    "height": 900,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 1425,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/login",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1905,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/register",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1905,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pending",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1905,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/account-status",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Kualitas terjaga.Setiap derajatnya.",
+    "pageWidth": 1905,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Dashboard monitoring",
+    "pageWidth": 1905,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-chiller",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Monitoring suhu chiller",
+    "pageWidth": 1905,
+    "sliders": 5,
+    "smallText": []
+  },
+  {
+    "route": "/suhu-freezer",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Monitoring suhu freezer",
+    "pageWidth": 1905,
+    "sliders": 4,
+    "smallText": []
+  },
+  {
+    "route": "/laporan",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Laporan monitoring",
+    "pageWidth": 1905,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/dashboard/users",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Manajemen Pengguna",
+    "pageWidth": 1905,
+    "sliders": 0,
+    "smallText": []
+  },
+  {
+    "route": "/pengaturan",
+    "width": 1920,
+    "height": 1080,
+    "heading": "Pengaturan workspace",
+    "pageWidth": 1905,
+    "sliders": 0,
+    "smallText": []
+  }
+]

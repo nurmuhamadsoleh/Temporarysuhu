@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { requireActor } from "@/lib/server/auth";
+import { requireActor, rateLimit } from "@/lib/server/auth";
 import { report, generatePdf } from "@/lib/server/reports";
 import { putFile } from "@/lib/server/storage";
 import { getFile } from "@/lib/server/storage";
@@ -10,6 +10,7 @@ import { fail, AppError } from "@/lib/server/errors";
 export async function GET(_: Request, c: { params: Promise<{ id: string }> }) {
   try {
     const actor = await requireActor();
+    await rateLimit(`pdf-download:${actor.id}`, 60);
     const id = z.uuid().parse((await c.params).id),
       { snapshot, row } = await report(id);
     const controlState = snapshot.control

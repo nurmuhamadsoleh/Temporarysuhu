@@ -1,0 +1,154 @@
+{
+  "date": "2026-11-01",
+  "scope": "UI/UX refactor only",
+  "findings": [
+    "Label, caption, status dan tombol operasional sebelumnya banyak memakai font 8–11px.",
+    "Layout berbasis desktop dan breakpoint nonstandar; sidebar mobile custom tanpa fokus modal.",
+    "Grid slider dipaksa 5/4 kolom walaupun ruang container terlalu sempit.",
+    "Tabel, form filter, tombol export dan pagination memerlukan pembatasan/wrapping yang konsisten.",
+    "Gaya table/th/td global mengganggu ukuran kalender Ant Design; kini scoped ke tabel data.",
+    "Dialog custom belum memiliki focus trap/Escape; diganti Modal Ant Design.",
+    "Grafik memakai label 10px dan belum memiliki kontrol sensor dengan keyboard.",
+    "Resize tanda tangan perlu memperhitungkan DPR dan menjaga koordinat serta ukuran goresan setelah rotasi."
+  ],
+  "design": {
+    "fontFamily": "Arial, Helvetica, sans-serif (existing system font; no external font request)",
+    "headings": {
+      "h1": [
+        24,
+        32
+      ],
+      "h2": [
+        20,
+        24
+      ],
+      "h3": [
+        18,
+        20
+      ]
+    },
+    "body": [
+      14,
+      16
+    ],
+    "label": 14,
+    "input": [
+      16,
+      14
+    ],
+    "captionMinimum": 12,
+    "temperature": [
+      26,
+      30
+    ],
+    "controlHeight": 44,
+    "controlHeightLG": 48,
+    "primary": "#2563eb",
+    "text": "#1b2c46",
+    "secondary": "#52637a",
+    "border": "#dce4ee",
+    "radius": 12,
+    "pageSpacing": [
+      16,
+      32
+    ],
+    "breakpoints": [
+      640,
+      768,
+      1024,
+      1280,
+      1536
+    ],
+    "sliderMinimumCardWidth": 190,
+    "sliderRailHeight": 260,
+    "chartHeight": [
+      280,
+      360
+    ]
+  },
+  "newReusable": [
+    "src/config/design.ts",
+    "src/components/layout/UIProvider.tsx",
+    "src/components/ui/ResponsiveDialog.tsx",
+    "src/lib/signature-layout.ts"
+  ],
+  "updatedFiles": [
+    "src/app/layout.tsx",
+    "src/app/globals.css",
+    "src/components/layout/Shell.tsx",
+    "src/components/dashboard/Dashboard.tsx",
+    "src/components/charts/TemperatureCharts.tsx",
+    "src/components/temperature/MeasurementForm.tsx",
+    "src/components/temperature/TemperatureVerticalSlider.tsx",
+    "src/components/signature/SignaturePad.tsx",
+    "src/components/reports/Reports.tsx",
+    "src/components/users/UsersManagement.tsx",
+    "src/components/Admin.tsx",
+    "src/app/(dashboard)/suhu-chiller/page.tsx",
+    "src/app/(dashboard)/suhu-freezer/page.tsx",
+    "src/app/(dashboard)/dashboard/users/page.tsx",
+    "docs/TEMPERATURE_SLIDERS.md"
+  ],
+  "testFiles": [
+    "tests/signature-layout.test.ts",
+    "tests/visual/ResponsivePreview.tsx",
+    "tests/visual/preview-navigation.tsx",
+    "tests/visual/serve-responsive.mjs"
+  ],
+  "checks": {
+    "typecheck": "passed",
+    "lint": "passed (zero warnings)",
+    "tests": {
+      "passed": 96,
+      "files": 18
+    },
+    "productionBuild": "passed: Next.js Webpack",
+    "responsive": {
+      "templates": 10,
+      "viewportSizes": [
+        "320x568",
+        "360x800",
+        "375x812",
+        "390x844",
+        "430x932",
+        "768x1024",
+        "1024x768",
+        "1280x800",
+        "1440x900",
+        "1920x1080"
+      ],
+      "combinations": 100,
+      "pageOverflow": 0,
+      "operationalTextBelow12px": 0,
+      "evidence": "viewport-audit.json"
+    },
+    "interactions": [
+      "Chiller slider ArrowUp keeps a numeric 0.1 step",
+      "DatePicker and TimePicker fit inside 320x568 viewport",
+      "Drawer closes with Escape",
+      "User invite/edit modal, role Popconfirm and dropdown fit mobile without submitting changes",
+      "Report approval modal and PDF preview container fit mobile",
+      "Chart sensor toggle works with Enter",
+      "Signature drawn with mouse, previewed, rotated 320->768->320; PNG before/after identical"
+    ]
+  },
+  "limits": [
+    "Browser verification uses actual client components with isolated fixtures, not an authenticated Google session or operational spreadsheet data.",
+    "AuthFrame is shared by login/register/pending/account-status; legacy login and registration-complete were source-audited. Server-only redirects have no independent UI.",
+    "Existing pending route is /pending, not /pending-approval; report detail is an inline preview/approval, not a separate page route.",
+    "Google OAuth login/logout, live Sheets writes and production domain were not exercised. API/auth/permission/schema/PDF-generation code was not changed.",
+    "Touch layouts and touch-action were checked through browser emulation/layout; a physical touchscreen and formal assistive-technology/WCAG audit were not used."
+  ],
+  "dependenciesAdded": [],
+  "screenshots": [
+    "after-chiller-desktop.png",
+    "after-dashboard-mobile.png",
+    "after-login-mobile.png",
+    "after-users-mobile.png",
+    "before--dashboard-users-mobile.png",
+    "before--login-mobile.png",
+    "before--suhu-chiller-mobile.png",
+    "before-dashboard-mobile.png",
+    "signature-after-rotation.png"
+  ]
+}
