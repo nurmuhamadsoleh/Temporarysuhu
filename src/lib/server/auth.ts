@@ -60,7 +60,7 @@ export const authOptions: NextAuthOptions = {
     ),
   secret: process.env.AUTH_SECRET,
   session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
-  pages: { signIn: "/login", error: "/login" },
+  pages: { signIn: "/login", error: "/auth/error" },
   logger: {
     error(code) {
       safeLog("auth_error", code);
@@ -137,8 +137,10 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider === "google") {
         try {
           verifiedGoogleProfile(profile, account.providerAccountId);
+          safeLog("auth_stage", "GOOGLE_PROFILE_VERIFIED");
           return true;
         } catch {
+          safeLog("auth_error", "GOOGLE_PROFILE_REJECTED");
           return false;
         }
       }
@@ -150,8 +152,30 @@ export const authOptions: NextAuthOptions = {
           profile,
           account.providerAccountId,
         );
-        await rateLimit(`oauth:${identity.googleId}`, 40);
-        const found = await syncGoogleIdentity(identity);
+        try {
+          await rateLimit(`oauth:${identity.googleId}`, 40);
+        } catch (error) {
+          safeLog(
+            "auth_error",
+            error instanceof AppError && error.status === 429
+              ? "OAUTH_RATE_LIMITED"
+              : "OAUTH_STORAGE_UNAVAILABLE",
+          );
+          throw error;
+        }
+        let found: Awaited<ReturnType<typeof syncGoogleIdentity>>;
+        try {
+          found = await syncGoogleIdentity(identity);
+        } catch (error) {
+          safeLog(
+            "auth_error",
+            error instanceof AppError && error.status === 403
+              ? "OAUTH_ACCOUNT_DENIED"
+              : "OAUTH_USER_STORE_UNAVAILABLE",
+          );
+          throw error;
+        }
+        safeLog("auth_stage", `OAUTH_USER_${found?.status || "UNREGISTERED"}`);
         token.id = found?.id || "";
         token.googleId = identity.googleId;
         token.googleVerified = true;
@@ -177,9 +201,15 @@ export const authOptions: NextAuthOptions = {
         token.googleVerified === true &&
         typeof token.googleId === "string"
       ) {
-        const u = token.id
-          ? await findUser(String(token.id))
-          : await findGoogleUser(token.googleId);
+        let u: Awaited<ReturnType<typeof findUser>>;
+        try {
+          u = token.id
+            ? await findUser(String(token.id))
+            : await findGoogleUser(token.googleId);
+        } catch (error) {
+          safeLog("auth_error", "SESSION_USER_STORE_UNAVAILABLE");
+          throw error;
+        }
         const valid = u?.googleId === token.googleId ? u : null;
         session.user = {
           id: valid?.id || "",

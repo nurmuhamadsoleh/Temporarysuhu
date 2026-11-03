@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { LoaderCircle } from "lucide-react";
 export function GoogleButton({
@@ -11,6 +11,26 @@ export function GoogleButton({
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  useEffect(() => {
+    const restored = () => {
+      setBusy(false);
+      setError("");
+    };
+    window.addEventListener("pageshow", restored);
+    return () => window.removeEventListener("pageshow", restored);
+  }, []);
+  useEffect(() => {
+    if (!busy) return;
+    // Keep a single attempt in flight; recovery reload cancels a stalled request.
+    const timer = window.setTimeout(
+      () =>
+        setError(
+          "Koneksi login belum selesai. Muat ulang halaman untuk mencoba kembali.",
+        ),
+      25000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [busy]);
   return (
     <div className="my-6">
       {!configured && (
@@ -21,6 +41,7 @@ export function GoogleButton({
       <button
         className="google-auth-button"
         disabled={busy || !configured}
+        aria-busy={busy}
         onClick={async () => {
           setBusy(true);
           setError("");
@@ -64,7 +85,12 @@ export function GoogleButton({
       </button>
       {error && (
         <p className="field-error mt-3" role="alert">
-          {error}
+          {error}{" "}
+          {busy && (
+            <a className="text-link" href={register ? "/register" : "/login"}>
+              Muat ulang halaman
+            </a>
+          )}
         </p>
       )}
     </div>

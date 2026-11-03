@@ -9,16 +9,21 @@ import {
 } from "@/lib/server/auth";
 import { AuthFrame } from "@/components/auth/AuthFrame";
 import { GoogleButton } from "@/components/auth/GoogleButton";
+import { authErrorCode } from "@/lib/auth-feedback";
 export const dynamic = "force-dynamic";
 export default async function Login({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  const { error } = await searchParams;
+  // NextAuth v4 sends some callback failures through signIn, not pages.error.
+  // Handle them before session/APP_USERS lookup so the error UI stays available.
+  if (error !== undefined)
+    redirect(`/auth/error?error=${authErrorCode(error)}`);
   const s = await getServerSession(authOptions);
   if (s?.user.status === "ACTIVE") redirect("/dashboard");
   if (s?.user.status === "PENDING") redirect("/pending");
-  const { error } = await searchParams;
   return (
     <AuthFrame>
       <span className="eyebrow">Selamat Datang Kembali</span>
@@ -27,12 +32,6 @@ export default async function Login({
         Gunakan akun Google yang telah terdaftar untuk mengakses sistem
         monitoring suhu.
       </p>
-      {error && (
-        <p role="alert" className="sop-notice mt-5">
-          Login belum dapat diselesaikan. Pastikan akun memiliki izin atau
-          hubungi administrator.
-        </p>
-      )}
       <GoogleButton configured={googleConfigured()} />
       <p className="muted">
         Belum memiliki akun?{" "}
