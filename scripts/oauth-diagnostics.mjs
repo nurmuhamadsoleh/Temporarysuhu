@@ -1,5 +1,6 @@
 import nextEnv from "@next/env";
 import { lookup } from "node:dns/promises";
+import { GOOGLE_CALLBACK_PATH } from "../src/config/app-origin.mjs";
 import {
   validateAuthEnvironment,
   ConfigurationError,
@@ -15,7 +16,7 @@ const report = { at: new Date().toISOString(), checks: [] };
 try {
   const config = validateAuthEnvironment();
   const hostname = new URL(config.origin).hostname;
-  report.callbackUrl = `${config.origin}/api/auth/callback/google`;
+  report.callbackUrl = `${config.origin}${GOOGLE_CALLBACK_PATH}`;
   report.checks.push({
     component: "authentication",
     status: "configured",

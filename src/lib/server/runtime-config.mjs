@@ -1,6 +1,7 @@
 import { z } from "zod";
 import path from "node:path";
 import { createPrivateKey } from "node:crypto";
+import { PRODUCTION_ORIGIN } from "../../config/app-origin.mjs";
 export class ConfigurationError extends Error {
   constructor(fields) {
     const safeFields = [...new Set(fields)].filter((field) =>
@@ -27,7 +28,10 @@ export function parseBooleanEnv(raw, defaultValue = false) {
 }
 /** @param {Record<string,string|undefined>} env */
 export function authOrigin(env = process.env) {
-  const raw = env.AUTH_URL || env.NEXTAUTH_URL;
+  const primary = env.AUTH_URL?.trim();
+  const secondary = env.NEXTAUTH_URL?.trim();
+  const field = primary ? "AUTH_URL" : secondary ? "NEXTAUTH_URL" : "AUTH_URL";
+  const raw = primary || secondary;
   if (!raw) throw new ConfigurationError(["AUTH_URL"]);
   try {
     const u = new URL(raw);
@@ -37,12 +41,13 @@ export function authOrigin(env = process.env) {
       u.password ||
       u.search ||
       u.hash ||
-      u.pathname !== "/"
+      u.pathname !== "/" ||
+      (env.NODE_ENV === "production" && u.origin !== PRODUCTION_ORIGIN)
     )
       throw new Error();
     return u.origin;
   } catch {
-    throw new ConfigurationError(["AUTH_URL"]);
+    throw new ConfigurationError([field]);
   }
 }
 const blank = (v) => (typeof v === "string" && !v.trim() ? undefined : v);
@@ -157,8 +162,8 @@ export function validateRuntimeEnvironment(
   let origin;
   try {
     if (auth) origin = authOrigin(env);
-  } catch {
-    errors.push("AUTH_URL");
+  } catch (error) {
+    errors.push(...(error instanceof ConfigurationError ? error.fields : ["AUTH_URL"]));
   }
   if (v.AUTH_URL && v.NEXTAUTH_URL) {
     try {

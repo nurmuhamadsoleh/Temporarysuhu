@@ -9,7 +9,7 @@ import { locked, getFile, putFile } from "./storage";
 import { roles, type Actor } from "@/lib/domain";
 import { verifiedGoogleProfile, type GoogleIdentity } from "@/lib/users";
 import { safeLog } from "./safe-log";
-import { parseBooleanEnv } from "./runtime-config.mjs";
+import { parseBooleanEnv, authOrigin } from "./runtime-config.mjs";
 import {
   findUser,
   findGoogleUser,
@@ -245,12 +245,13 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async redirect({ url, baseUrl }) {
+      const origin = process.env.NODE_ENV === "production" ? authOrigin() : baseUrl;
       if (url.startsWith("/") && !url.startsWith("//"))
-        return `${baseUrl}${url}`;
+        return `${origin}${url}`;
       try {
-        if (new URL(url).origin === baseUrl) return url;
+        if (new URL(url).origin === origin) return url;
       } catch {}
-      return `${baseUrl}/auth/continue`;
+      return `${origin}/auth/continue`;
     },
   },
 };
