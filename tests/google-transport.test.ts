@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { gzipSync } from "node:zlib";
+import { generateKeyPairSync } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { googleFetch } from "@/lib/server/google-transport";
 import { getSpreadsheetClient } from "@/lib/server/sheets";
@@ -39,8 +40,15 @@ describe("Google API native transport", () => {
 
   it("uses the same transport for Sheets and JWT token requests", () => {
     vi.stubEnv("GOOGLE_SERVICE_ACCOUNT_EMAIL", "test@example.invalid");
-    vi.stubEnv("GOOGLE_PRIVATE_KEY", "test-only-not-a-key");
-    vi.stubEnv("GOOGLE_SPREADSHEET_ID", "test-only");
+    vi.stubEnv(
+      "GOOGLE_PRIVATE_KEY",
+      generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: "pkcs8", format: "pem" },
+        publicKeyEncoding: { type: "spki", format: "pem" },
+      }).privateKey,
+    );
+    vi.stubEnv("GOOGLE_SPREADSHEET_ID", "test-only-spreadsheet-12345678");
     const client = getSpreadsheetClient();
     expect(client.context._options.fetchImplementation).toBe(googleFetch);
     const auth = client.context._options.auth as {

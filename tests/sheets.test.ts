@@ -1,5 +1,9 @@
 import { emptyDeviceInput } from "@/lib/temperature-policy";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+const testPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
+  .privateKey.export({ type: "pkcs8", format: "pem" })
+  .toString();
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   values: vi.fn(),
@@ -32,9 +36,9 @@ const actor = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
-  process.env.GOOGLE_SPREADSHEET_ID = "test";
+  process.env.GOOGLE_SPREADSHEET_ID = "test-spreadsheet-identifier";
   process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL = "test@example.test";
-  process.env.GOOGLE_PRIVATE_KEY = "test";
+  process.env.GOOGLE_PRIVATE_KEY = testPrivateKey;
   mocks.get.mockResolvedValue({
     data: {
       sheets: Object.keys(headers).map((title, sheetId) => ({

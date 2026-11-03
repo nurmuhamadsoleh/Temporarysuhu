@@ -9,6 +9,7 @@ import { locked, getFile, putFile } from "./storage";
 import { roles, type Actor } from "@/lib/domain";
 import { verifiedGoogleProfile, type GoogleIdentity } from "@/lib/users";
 import { safeLog } from "./safe-log";
+import { parseBooleanEnv } from "./runtime-config.mjs";
 import {
   findUser,
   findGoogleUser,
@@ -43,7 +44,7 @@ export async function rateLimit(key: string, max = 10, windowMs = 900000) {
   });
 }
 export const legacyEnabled = () =>
-  process.env.LEGACY_CREDENTIALS_ENABLED !== "false";
+  parseBooleanEnv(process.env.LEGACY_CREDENTIALS_ENABLED, false);
 export const googleConfigured = () =>
   Boolean(
     (process.env.AUTH_GOOGLE_ID || process.env.GOOGLE_CLIENT_ID) &&

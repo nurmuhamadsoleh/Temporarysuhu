@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { AppError } from "@/lib/server/errors";
 const m = vi.hoisted(() => ({
   session: vi.fn(),
   find: vi.fn(),
@@ -40,6 +41,11 @@ beforeEach(() => {
   m.find.mockResolvedValue(user);
 });
 describe("Server authorization", () => {
+  it("fails closed when APP_USERS is unavailable, even for a previously active session", async () => {
+    m.find.mockRejectedValueOnce(new AppError(503, "Database unavailable"));
+    await expect(requireActor()).rejects.toMatchObject({ status: 503 });
+    expect(m.legacy).not.toHaveBeenCalled();
+  });
   it("rejects unauthenticated requests", async () => {
     m.session.mockResolvedValue(null);
     await expect(requireActor()).rejects.toMatchObject({ status: 401 });

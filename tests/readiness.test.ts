@@ -1,4 +1,4 @@
-import { it, expect, vi, beforeEach } from "vitest";
+import { it, expect, vi, beforeEach, afterEach } from "vitest";
 const m = vi.hoisted(() => ({ get: vi.fn(), log: vi.fn() }));
 vi.mock("@/lib/server/sheets", () => ({
   getSpreadsheetClient: () => ({
@@ -12,7 +12,11 @@ vi.mock("@/lib/server/sheets", () => ({
 }));
 vi.mock("@/lib/server/safe-log", () => ({ safeLog: m.log }));
 import { checkSheetsAccess } from "@/lib/server/readiness";
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => vi.restoreAllMocks());
 it("checks Sheets headers read-only without disclosing row content", async () => {
   m.get.mockResolvedValue({
     data: {
@@ -28,8 +32,19 @@ it("checks Sheets headers read-only without disclosing row content", async () =>
 });
 it("fails readiness on invalid schema or inaccessible spreadsheet and logs only safe codes", async () => {
   m.get.mockRejectedValue(new Error("PRIVATE_KEY=do-not-log"));
-  await expect(checkSheetsAccess()).rejects.toThrow("SHEETS_ACCESS_OR_SCHEMA");
-  expect(JSON.stringify(m.log.mock.calls)).not.toContain("PRIVATE_KEY");
+  await expect(checkSheetsAccess()).rejects.toMatchObject({
+    status: 503,
+    errorCode: "GOOGLE_SHEETS_UNAVAILABLE",
+  });
+  expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(
+    "do-not-log",
+  );
+  expect(console.warn).toHaveBeenCalledWith(
+    expect.stringContaining("GOOGLE_SHEETS_UNAVAILABLE"),
+  );
   m.get.mockResolvedValue({ data: { valueRanges: [] } });
-  await expect(checkSheetsAccess()).rejects.toThrow("SHEETS_ACCESS_OR_SCHEMA");
+  await expect(checkSheetsAccess()).rejects.toMatchObject({
+    status: 503,
+    errorCode: "GOOGLE_SHEETS_SCHEMA_MISMATCH",
+  });
 });

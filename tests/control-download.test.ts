@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
   fresh: vi.fn(),
 }));
 vi.mock("@/lib/server/auth", () => ({
+  rateLimit: async () => {},
   requireActor: async () => ({ id: "actor", role: "SUPERVISOR" }),
 }));
 vi.mock("@/lib/server/reports", () => ({

@@ -1,4 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+const testPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
+  .privateKey.export({ type: "pkcs8", format: "pem" })
+  .toString();
 import type { sheets_v4 } from "googleapis";
 import {
   emptyDeviceInput,
@@ -40,8 +44,8 @@ let tables: Record<string, unknown[][]>;
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL = "test@example.test";
-  process.env.GOOGLE_PRIVATE_KEY = "test";
-  process.env.GOOGLE_SPREADSHEET_ID = "test";
+  process.env.GOOGLE_PRIVATE_KEY = testPrivateKey;
+  process.env.GOOGLE_SPREADSHEET_ID = "test-spreadsheet-identifier";
   tables = Object.fromEntries(
     names.map((name) => [name, [[...headers[name]]]]),
   );

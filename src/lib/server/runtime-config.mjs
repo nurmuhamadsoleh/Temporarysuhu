@@ -11,6 +11,20 @@ export class ConfigurationError extends Error {
     this.fields = safeFields;
   }
 }
+/** @param {string|undefined} raw */
+export function parseBooleanEnv(raw, defaultValue = false) {
+  if (raw === undefined || (typeof raw === "string" && !raw.trim()))
+    return defaultValue;
+  if (typeof raw === "string") {
+    switch (raw.trim().toLowerCase()) {
+      case "true":
+        return true;
+      case "false":
+        return false;
+    }
+  }
+  throw new ConfigurationError(["LEGACY_CREDENTIALS_ENABLED"]);
+}
 /** @param {Record<string,string|undefined>} env */
 export function authOrigin(env = process.env) {
   const raw = env.AUTH_URL || env.NEXTAUTH_URL;
@@ -64,7 +78,19 @@ export function validateRuntimeEnvironment(
     PRIVATE_STORAGE_PATH: value,
     STORAGE_PERSISTENCE_CONFIRMED: z.enum(["true", "false"]).optional(),
     AUTH_COORDINATION_MODE: z.literal("single-host").optional(),
-    LEGACY_CREDENTIALS_ENABLED: z.enum(["true", "false"]).optional(),
+    LEGACY_CREDENTIALS_ENABLED: z
+      .preprocess(blank, z.string().optional())
+      .transform((raw, ctx) => {
+        try {
+          return parseBooleanEnv(raw, false);
+        } catch {
+          ctx.addIssue({
+            code: "custom",
+            message: "Invalid boolean environment configuration",
+          });
+          return z.NEVER;
+        }
+      }),
     INITIAL_SUPER_ADMIN_EMAIL: value,
     COMPANY_NAME: value,
     PDF_SIGNING_ENABLED: z.enum(["true", "false"]).optional(),
@@ -153,7 +179,6 @@ export function validateRuntimeEnvironment(
   }
   const required = [];
   if (auth) required.push("AUTH_SECRET");
-  if (auth && production) required.push("LEGACY_CREDENTIALS_ENABLED");
   const authMode = v.GOOGLE_AUTH_MODE || "service-account";
   if (database) {
     required.push("GOOGLE_SPREADSHEET_ID");

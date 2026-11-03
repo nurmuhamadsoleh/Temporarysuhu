@@ -34,7 +34,7 @@ const config: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "same-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          ...(process.env.APP_ENV === "production" &&
+          ...(process.env.NODE_ENV === "production" &&
           (process.env.AUTH_URL || process.env.NEXTAUTH_URL || "").startsWith(
             "https://",
           )
