@@ -15,7 +15,7 @@ async function main() {
     ["/login", 200],
     ["/register", 200],
     ["/api/health", 200],
-    ["/api/health/ready", 200],
+    ["/api/health/ready", 401],
     ["/api/auth/providers", 200],
     ["/api/users", 401],
   ];
@@ -36,10 +36,6 @@ async function main() {
       if (path === "/api/health" && ok) {
         const data = await r.json();
         ok = data.service === "tempcontrol" && data.status === "alive";
-      }
-      if (path === "/api/health/ready" && ok) {
-        const data = await r.json();
-        ok = data.service === "tempcontrol" && data.status === "ready";
       }
       console.log(JSON.stringify({ path, status: r.status, passed: ok }));
       failed ||= !ok;

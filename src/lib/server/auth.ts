@@ -23,7 +23,13 @@ export async function rateLimit(key: string, max = 10, windowMs = 900000) {
     let state: Record<string, { n: number; at: number }> = {};
     try {
       state = JSON.parse((await getFile("rate-limits.json")).toString());
-    } catch {}
+    } catch (error) {
+      if ((error as { code?: string })?.code !== "ENOENT")
+        throw new AppError(
+          503,
+          "Penyimpanan pembatasan akses tidak tersedia. Hubungi administrator.",
+        );
+    }
     const now = Date.now();
     state = Object.fromEntries(
       Object.entries(state).filter(([, v]) => v.at > now - windowMs),

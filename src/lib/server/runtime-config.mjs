@@ -3,10 +3,12 @@ import path from "node:path";
 import { createPrivateKey } from "node:crypto";
 export class ConfigurationError extends Error {
   constructor(fields) {
-    super(
-      `Konfigurasi runtime tidak valid: ${[...new Set(fields)].join(", ")}`,
+    const safeFields = [...new Set(fields)].filter((field) =>
+      /^[A-Z][A-Z0-9_]{0,79}$/.test(field),
     );
+    super(`Konfigurasi runtime tidak valid: ${safeFields.join(", ")}`);
     this.name = "ConfigurationError";
+    this.fields = safeFields;
   }
 }
 /** @param {Record<string,string|undefined>} env */
@@ -35,9 +37,16 @@ const value = z.preprocess(blank, z.string().min(1).optional());
 export function validateRuntimeEnvironment(
   env = process.env,
   root = process.cwd(),
+  scope = "all",
 ) {
+  const auth = scope === "all" || scope === "auth";
+  const database = scope === "all" || scope === "database";
+  const storageFeature = scope === "all" || scope === "storage";
+  const signingFeature = scope === "all" || scope === "signing";
+  if (!["all", "auth", "database", "storage", "signing"].includes(scope))
+    throw new Error("Invalid configuration scope");
   const production = env.NODE_ENV === "production";
-  const schema = z.object({
+  const fullSchema = z.object({
     APP_ENV: z.enum(["development", "production"]).optional(),
     AUTH_URL: value,
     NEXTAUTH_URL: value,
@@ -49,6 +58,8 @@ export function validateRuntimeEnvironment(
     GOOGLE_SPREADSHEET_ID: value,
     GOOGLE_SERVICE_ACCOUNT_EMAIL: value,
     GOOGLE_PRIVATE_KEY: value,
+    GOOGLE_AUTH_MODE: z.enum(["service-account", "adc"]).optional(),
+    GOOGLE_APPLICATION_CREDENTIALS: value,
     SIGNATURE_STORAGE_PROVIDER: z.literal("local").optional(),
     PRIVATE_STORAGE_PATH: value,
     STORAGE_PERSISTENCE_CONFIRMED: z.enum(["true", "false"]).optional(),
@@ -66,6 +77,46 @@ export function validateRuntimeEnvironment(
     OPENSSL_PATH: value,
     PORT: z.coerce.number().int().min(1).max(65535).optional(),
   });
+  const groupFields = {
+    auth: [
+      "APP_ENV",
+      "AUTH_URL",
+      "NEXTAUTH_URL",
+      "AUTH_SECRET",
+      "AUTH_GOOGLE_ID",
+      "AUTH_GOOGLE_SECRET",
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "LEGACY_CREDENTIALS_ENABLED",
+      "PORT",
+    ],
+    database: [
+      "GOOGLE_SPREADSHEET_ID",
+      "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+      "GOOGLE_PRIVATE_KEY",
+      "GOOGLE_AUTH_MODE",
+      "GOOGLE_APPLICATION_CREDENTIALS",
+    ],
+    storage: [
+      "SIGNATURE_STORAGE_PROVIDER",
+      "PRIVATE_STORAGE_PATH",
+      "STORAGE_PERSISTENCE_CONFIRMED",
+      "AUTH_COORDINATION_MODE",
+    ],
+    signing: [
+      "PDF_SIGNING_ENABLED",
+      "PDF_SIGNING_P12_PATH",
+      "PDF_SIGNING_P12_PASSWORD",
+      "PDF_SIGNING_CERTIFICATE_ENV",
+      "OPENSSL_PATH",
+    ],
+  };
+  const schema =
+    scope === "all"
+      ? fullSchema
+      : fullSchema.pick(
+          Object.fromEntries(groupFields[scope].map((key) => [key, true])),
+        );
   const result = schema.safeParse(env);
   if (!result.success)
     throw new ConfigurationError(
@@ -73,11 +124,13 @@ export function validateRuntimeEnvironment(
     );
   const v = result.data,
     errors = [];
-  if (production && v.APP_ENV !== "production") errors.push("APP_ENV");
-  if (!production && v.APP_ENV === "production") errors.push("NODE_ENV");
+  if (auth && production && v.APP_ENV && v.APP_ENV !== "production")
+    errors.push("APP_ENV");
+  if (auth && !production && v.APP_ENV === "production")
+    errors.push("NODE_ENV");
   let origin;
   try {
-    origin = authOrigin(env);
+    if (auth) origin = authOrigin(env);
   } catch {
     errors.push("AUTH_URL");
   }
@@ -98,16 +151,21 @@ export function validateRuntimeEnvironment(
     )
       errors.push("AUTH_URL");
   }
-  const required = [
-    "AUTH_SECRET",
-    "GOOGLE_SPREADSHEET_ID",
-    "GOOGLE_SERVICE_ACCOUNT_EMAIL",
-    "GOOGLE_PRIVATE_KEY",
-    "SIGNATURE_STORAGE_PROVIDER",
-    "PRIVATE_STORAGE_PATH",
-    "AUTH_COORDINATION_MODE",
-  ];
-  if (production) required.push("LEGACY_CREDENTIALS_ENABLED", "COMPANY_NAME");
+  const required = [];
+  if (auth) required.push("AUTH_SECRET");
+  if (auth && production) required.push("LEGACY_CREDENTIALS_ENABLED");
+  const authMode = v.GOOGLE_AUTH_MODE || "service-account";
+  if (database) {
+    required.push("GOOGLE_SPREADSHEET_ID");
+    if (authMode === "service-account")
+      required.push("GOOGLE_SERVICE_ACCOUNT_EMAIL", "GOOGLE_PRIVATE_KEY");
+  }
+  if (storageFeature)
+    required.push(
+      "SIGNATURE_STORAGE_PROVIDER",
+      "PRIVATE_STORAGE_PATH",
+      "AUTH_COORDINATION_MODE",
+    );
   for (const key of required) if (!v[key]) errors.push(key);
   if (
     v.AUTH_SECRET &&
@@ -117,6 +175,8 @@ export function validateRuntimeEnvironment(
   )
     errors.push("AUTH_SECRET");
   if (
+    database &&
+    authMode === "service-account" &&
     v.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
     !z.email().safeParse(v.GOOGLE_SERVICE_ACCOUNT_EMAIL).success
   )
@@ -128,7 +188,7 @@ export function validateRuntimeEnvironment(
     errors.push("INITIAL_SUPER_ADMIN_EMAIL");
   if (v.GOOGLE_SPREADSHEET_ID && !/^[\w-]{20,}$/.test(v.GOOGLE_SPREADSHEET_ID))
     errors.push("GOOGLE_SPREADSHEET_ID");
-  if (v.GOOGLE_PRIVATE_KEY) {
+  if (database && authMode === "service-account" && v.GOOGLE_PRIVATE_KEY) {
     try {
       if (
         createPrivateKey(v.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"))
@@ -139,10 +199,17 @@ export function validateRuntimeEnvironment(
       errors.push("GOOGLE_PRIVATE_KEY");
     }
   }
+  if (
+    database &&
+    authMode === "adc" &&
+    v.GOOGLE_APPLICATION_CREDENTIALS &&
+    !path.isAbsolute(v.GOOGLE_APPLICATION_CREDENTIALS)
+  )
+    errors.push("GOOGLE_APPLICATION_CREDENTIALS");
   const googleId = v.AUTH_GOOGLE_ID || v.GOOGLE_CLIENT_ID,
     googleSecret = v.AUTH_GOOGLE_SECRET || v.GOOGLE_CLIENT_SECRET;
-  if (production && !googleId) errors.push("AUTH_GOOGLE_ID");
-  if (production && !googleSecret) errors.push("AUTH_GOOGLE_SECRET");
+  if (auth && production && !googleId) errors.push("AUTH_GOOGLE_ID");
+  if (auth && production && !googleSecret) errors.push("AUTH_GOOGLE_SECRET");
   if (Boolean(googleId) !== Boolean(googleSecret))
     errors.push("AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET");
   if (googleId && !/^[\w-]+\.apps\.googleusercontent\.com$/.test(googleId))
@@ -168,6 +235,7 @@ export function validateRuntimeEnvironment(
   const storage = path.resolve(v.PRIVATE_STORAGE_PATH || "./private-storage"),
     relative = path.relative(path.resolve(root), storage);
   if (
+    storageFeature &&
     production &&
     (!path.isAbsolute(v.PRIVATE_STORAGE_PATH || "") ||
       relative === "" ||
@@ -177,24 +245,25 @@ export function validateRuntimeEnvironment(
       v.STORAGE_PERSISTENCE_CONFIRMED !== "true")
   )
     errors.push("PRIVATE_STORAGE_PATH", "STORAGE_PERSISTENCE_CONFIRMED");
-  const signing = production
-    ? v.PDF_SIGNING_ENABLED === "true"
-    : Boolean(v.PDF_SIGNING_P12_PATH || v.PDF_SIGNING_P12_PASSWORD);
-  if (production && v.PDF_SIGNING_ENABLED === undefined)
-    errors.push("PDF_SIGNING_ENABLED");
+  const signing =
+    signingFeature &&
+    (production || v.PDF_SIGNING_ENABLED !== undefined
+      ? v.PDF_SIGNING_ENABLED === "true"
+      : Boolean(v.PDF_SIGNING_P12_PATH || v.PDF_SIGNING_P12_PASSWORD));
   if (signing) {
-    for (const key of [
-      "PDF_SIGNING_P12_PATH",
-      "PDF_SIGNING_P12_PASSWORD",
-      "OPENSSL_PATH",
-    ])
+    for (const key of ["PDF_SIGNING_P12_PATH", "PDF_SIGNING_P12_PASSWORD"])
       if (!v[key]) errors.push(key);
     if (production) {
       if (v.PDF_SIGNING_CERTIFICATE_ENV !== "production")
         errors.push("PDF_SIGNING_CERTIFICATE_ENV");
       if (!path.isAbsolute(v.PDF_SIGNING_P12_PATH || ""))
         errors.push("PDF_SIGNING_P12_PATH");
-      if (!path.isAbsolute(v.OPENSSL_PATH || "")) errors.push("OPENSSL_PATH");
+      if (
+        v.OPENSSL_PATH &&
+        v.OPENSSL_PATH !== "openssl" &&
+        !path.isAbsolute(v.OPENSSL_PATH)
+      )
+        errors.push("OPENSSL_PATH");
       const rel = path.relative(
         path.resolve(root),
         path.resolve(v.PDF_SIGNING_P12_PATH || "."),
@@ -206,11 +275,7 @@ export function validateRuntimeEnvironment(
       )
         errors.push("PDF_SIGNING_P12_PATH");
     }
-  } else if (
-    production &&
-    (v.PDF_SIGNING_P12_PATH || v.PDF_SIGNING_P12_PASSWORD)
-  )
-    errors.push("PDF_SIGNING_P12_PATH", "PDF_SIGNING_P12_PASSWORD");
+  }
   for (const key of Object.keys(env))
     if (
       key.startsWith("NEXT_PUBLIC_") &&
@@ -218,5 +283,31 @@ export function validateRuntimeEnvironment(
     )
       errors.push(key);
   if (errors.length) throw new ConfigurationError(errors);
-  return { ...v, origin, production, storage, signing, googleId, googleSecret };
+  return {
+    ...v,
+    APP_ENV: production ? "production" : "development",
+    origin,
+    production,
+    storage,
+    signing,
+    googleId,
+    googleSecret,
+    authMode,
+    OPENSSL_PATH: v.OPENSSL_PATH || "openssl",
+  };
 }
+
+/** @param {Record<string,string|undefined>} env */
+export const validateAuthEnvironment = (env = process.env) =>
+  validateRuntimeEnvironment(env, process.cwd(), "auth");
+/** @param {Record<string,string|undefined>} env */
+export const validateDatabaseEnvironment = (env = process.env) =>
+  validateRuntimeEnvironment(env, process.cwd(), "database");
+/** @param {Record<string,string|undefined>} env */
+export const validateStorageEnvironment = (
+  env = process.env,
+  root = process.cwd(),
+) => validateRuntimeEnvironment(env, root, "storage");
+/** @param {Record<string,string|undefined>} env */
+export const validateSigningEnvironment = (env = process.env) =>
+  validateRuntimeEnvironment(env, process.cwd(), "signing");

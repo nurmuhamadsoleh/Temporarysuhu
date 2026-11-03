@@ -1,16 +1,24 @@
 import nextEnv from "@next/env";
 const { loadEnvConfig } = nextEnv;
 import { spawn } from "node:child_process";
-import { validateRuntimeEnvironment } from "../src/lib/server/runtime-config.mjs";
+import {
+  validateAuthEnvironment,
+  ConfigurationError,
+} from "../src/lib/server/runtime-config.mjs";
+import { startupDiagnostic } from "../src/lib/server/startup-diagnostics.mjs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+const root = fileURLToPath(new URL("../", import.meta.url));
 process.env.NODE_ENV = "production";
-loadEnvConfig(process.cwd(), false, {
+loadEnvConfig(root, false, {
   info() {},
   error() {
     console.error("ENV_LOAD_FAILED");
   },
 });
 try {
-  const config = validateRuntimeEnvironment();
+  const config = validateAuthEnvironment();
+  process.env.APP_ENV = config.APP_ENV;
   delete process.env.NEXT_PHASE;
   process.env.AUTH_URL = config.origin;
   if (config.googleId) process.env.AUTH_GOOGLE_ID = config.googleId;
@@ -18,8 +26,12 @@ try {
   process.env.NEXTAUTH_URL = config.origin;
   const child = spawn(
     process.execPath,
-    ["node_modules/next/dist/bin/next", "start", ...process.argv.slice(2)],
-    { stdio: "inherit", env: process.env, windowsHide: true },
+    [
+      path.join(root, "node_modules/next/dist/bin/next"),
+      "start",
+      ...process.argv.slice(2),
+    ],
+    { cwd: root, stdio: "inherit", env: process.env, windowsHide: true },
   );
   for (const signal of ["SIGTERM", "SIGINT"])
     process.on(signal, () => child.kill(signal));
@@ -31,6 +43,13 @@ try {
     process.exitCode = code ?? 1;
   });
 } catch (error) {
+  startupDiagnostic(
+    "authentication",
+    "failed",
+    "AUTH_CONFIG_INVALID",
+    "CRITICAL",
+    error instanceof ConfigurationError ? error.fields : [],
+  );
   console.error(
     error instanceof Error && error.name === "ConfigurationError"
       ? error.message

@@ -1,6 +1,10 @@
 import "server-only";
 import { getSpreadsheetClient, headers } from "./sheets";
-import { safeLog } from "./safe-log";
+import {
+  FeatureUnavailable,
+  databaseUnavailable,
+  googleFailureCode,
+} from "./dependency-failure";
 export async function checkSheetsAccess() {
   try {
     const result = await getSpreadsheetClient().spreadsheets.values.batchGet(
@@ -15,18 +19,14 @@ export async function checkSheetsAccess() {
     for (const [i, [name, expected]] of Object.entries(headers).entries()) {
       const row = tables[i]?.values?.[0] || [];
       if (expected.some((v, j) => row[j] !== v))
-        throw new Error(
-          `SHEETS_SCHEMA_${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`,
-        );
+        throw databaseUnavailable("GOOGLE_SHEETS_SCHEMA_MISMATCH", [
+          `SHEET_${name.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`,
+        ]);
     }
     return true;
   } catch (error) {
-    const schema =
-      error instanceof Error && /^SHEETS_SCHEMA_[A-Z0-9_]+$/.test(error.message)
-        ? error.message
-        : undefined;
-    safeLog("sheets_check_failed", schema || "SHEETS_ACCESS_OR_SCHEMA");
-    throw new Error("SHEETS_ACCESS_OR_SCHEMA");
+    if (error instanceof FeatureUnavailable) throw error;
+    throw databaseUnavailable(googleFailureCode(error));
   }
 }
 let cache: { at: number; ok: boolean } | undefined;

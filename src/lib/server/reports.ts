@@ -15,8 +15,9 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { pdflibAddPlaceholder } from "@signpdf/placeholder-pdf-lib";
 import signpdf from "@signpdf/signpdf";
 import { P12Signer } from "@signpdf/signer-p12";
-import forge from "node-forge";
-import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { loadSigningCertificate, signingAvailability } from "./signing-service";
+export { validateP12 } from "./signing-service";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -364,50 +365,8 @@ export async function generatePdf(
     });
   return Buffer.from(await doc.save({ useObjectStreams: false }));
 }
-export function certificateConfigured() {
-  return Boolean(
-    (process.env.NODE_ENV !== "production" ||
-      process.env.PDF_SIGNING_ENABLED === "true") &&
-    process.env.PDF_SIGNING_P12_PATH &&
-    process.env.PDF_SIGNING_P12_PASSWORD,
-  );
-}
-export function validateP12(data: Buffer, password: string) {
-  try {
-    const p12 = forge.pkcs12.pkcs12FromAsn1(
-      forge.asn1.fromDer(data.toString("binary")),
-      password,
-    );
-    const keys =
-      p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[
-        forge.pki.oids.pkcs8ShroudedKeyBag
-      ] || [];
-    const certs =
-      p12.getBags({ bagType: forge.pki.oids.certBag })[
-        forge.pki.oids.certBag
-      ] || [];
-    const key = keys[0]?.key as forge.pki.rsa.PrivateKey | undefined;
-    const cert = certs
-      .map((b) => b.cert)
-      .find(
-        (c) =>
-          c && key && (c.publicKey as forge.pki.rsa.PublicKey).n.equals(key.n),
-      );
-    if (
-      !key ||
-      !cert ||
-      (process.env.NODE_ENV === "production" && cert.isIssuer(cert)) ||
-      cert.validity.notBefore > new Date() ||
-      cert.validity.notAfter < new Date()
-    )
-      throw new Error();
-    return cert;
-  } catch {
-    throw new AppError(
-      422,
-      "Sertifikat P12 invalid, belum berlaku, expired, atau password salah",
-    );
-  }
+export async function certificateConfigured() {
+  return (await signingAvailability()).available;
 }
 export async function verifySignedPdf(pdf: Buffer) {
   const match = /\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/.exec(
@@ -456,11 +415,7 @@ export async function verifySignedPdf(pdf: Buffer) {
   }
 }
 export async function signReport(id: string, actor: Actor) {
-  if (!certificateConfigured())
-    throw new AppError(
-      503,
-      "Mode B belum tersedia. Konfigurasikan sertifikat P12 dan password pada server.",
-    );
+  const certificate = await loadSigningCertificate();
   const { snapshot, row, index } = await report(id);
   if (row[4] !== "APPROVED")
     throw new AppError(409, "Laporan harus disetujui dan belum ditandatangani");
@@ -469,8 +424,6 @@ export async function signReport(id: string, actor: Actor) {
     if (!state.fresh || state.verification?.status !== "VERIFIED")
       throw new AppError(409, "Verifikasi tidak berlaku. Buat revisi laporan.");
   }
-  const p12 = await readFile(process.env.PDF_SIGNING_P12_PATH!);
-  validateP12(p12, process.env.PDF_SIGNING_P12_PASSWORD!);
   const pdf = await generatePdf(
     snapshot,
     {
@@ -482,7 +435,7 @@ export async function signReport(id: string, actor: Actor) {
   );
   const signed = await signpdf.sign(
     pdf,
-    new P12Signer(p12, { passphrase: process.env.PDF_SIGNING_P12_PASSWORD! }),
+    new P12Signer(certificate.data, { passphrase: certificate.password }),
   );
   await verifySignedPdf(signed);
   const file = `${id}.signed.pdf`;

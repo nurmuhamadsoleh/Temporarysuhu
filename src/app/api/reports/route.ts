@@ -16,7 +16,7 @@ export async function GET(req: Request) {
         approvedAt: r[6],
         revisionOf: r[9],
       })),
-      certificateConfigured: certificateConfigured(),
+      certificateConfigured: await certificateConfigured(),
     });
   } catch (e) {
     return fail(e);

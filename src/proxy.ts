@@ -7,7 +7,7 @@ export function proxy(request: NextRequest) {
   ).toString("base64");
   const development = process.env.NODE_ENV === "development";
   const https =
-    process.env.APP_ENV === "production" &&
+    process.env.NODE_ENV === "production" &&
     (process.env.AUTH_URL || process.env.NEXTAUTH_URL || "").startsWith(
       "https://",
     );

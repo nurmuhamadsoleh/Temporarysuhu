@@ -23,6 +23,11 @@ import { AppError } from "./errors";
 import { USER_HEADERS } from "@/lib/users";
 import { safeLog } from "./safe-log";
 import { googleFetch } from "./google-transport";
+import {
+  validateDatabaseEnvironment,
+  ConfigurationError,
+} from "./runtime-config.mjs";
+import { databaseUnavailable, googleFailureCode } from "./dependency-failure";
 export const headers: Record<string, string[]> = {
   "Suhu Chiller": [
     "RECORD ID",
@@ -131,24 +136,31 @@ export const headers: Record<string, string[]> = {
 };
 let client: sheets_v4.Sheets;
 export function getSpreadsheetClient() {
-  if (
-    !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ||
-    !process.env.GOOGLE_PRIVATE_KEY ||
-    !process.env.GOOGLE_SPREADSHEET_ID
-  )
-    throw new AppError(
-      503,
-      "Google Sheets belum dikonfigurasi. Isi service account dan bagikan spreadsheet kepada service account.",
+  let config;
+  try {
+    config = validateDatabaseEnvironment();
+  } catch (error) {
+    throw databaseUnavailable(
+      "DATABASE_CONFIG_INVALID",
+      error instanceof ConfigurationError ? error.fields : [],
     );
+  }
+  const transport = { fetchImplementation: googleFetch, timeout: 15000 };
   return (client ??= google.sheets({
     version: "v4",
-    fetchImplementation: googleFetch,
-    auth: new google.auth.JWT({
-      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-      transporterOptions: { fetchImplementation: googleFetch },
-    }),
+    ...transport,
+    auth:
+      config.authMode === "adc"
+        ? new google.auth.GoogleAuth({
+            scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+            clientOptions: { transporterOptions: transport },
+          })
+        : new google.auth.JWT({
+            email: config.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+            key: config.GOOGLE_PRIVATE_KEY!.replace(/\\n/g, "\n"),
+            scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+            transporterOptions: transport,
+          }),
   }));
 }
 const spreadsheetId = () => process.env.GOOGLE_SPREADSHEET_ID!;
@@ -160,14 +172,7 @@ export async function retryRead<T>(fn: () => Promise<T>): Promise<T> {
       const code = Number((e as { code?: unknown }).code);
       if (n >= 3 || ![429, 500, 502, 503, 504].includes(code)) {
         if (e instanceof AppError) throw e;
-        safeLog(
-          "sheets_check_failed",
-          `SHEETS_API_${Number.isFinite(code) ? code : "ERROR"}`,
-        );
-        throw new AppError(
-          503,
-          "Google Sheets tidak dapat diakses. Periksa konfigurasi dan izin service account.",
-        );
+        throw databaseUnavailable(googleFailureCode(e));
       }
       await new Promise((r) =>
         setTimeout(r, 250 * 2 ** n + Math.random() * 100),

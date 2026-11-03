@@ -51,7 +51,7 @@ export const previewControl = (req: Request) =>
     return {
       ...data,
       report: await buildTemperatureReportData(data.report),
-      certificateConfigured: certificateConfigured(),
+      certificateConfigured: await certificateConfigured(),
     };
   });
 export const saveControl = (req: Request) =>
@@ -88,7 +88,7 @@ export const readControl = (req: Request, c: Context) =>
         ...state,
         status: saved.row[4],
         revisionOf: saved.snapshot.revisionOf,
-        certificateConfigured: certificateConfigured(),
+        certificateConfigured: await certificateConfigured(),
       };
     },
     true,
