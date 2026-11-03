@@ -27,7 +27,13 @@ import {
   validateDatabaseEnvironment,
   ConfigurationError,
 } from "./runtime-config.mjs";
-import { databaseUnavailable, googleFailureCode } from "./dependency-failure";
+import { verifySignatureFile } from "./signature-integrity";
+import type { SaveProgress } from "./save-diagnostics";
+import {
+  FeatureUnavailable,
+  databaseUnavailable,
+  googleFailureCode,
+} from "./dependency-failure";
 export const headers: Record<string, string[]> = {
   "Suhu Chiller": [
     "RECORD ID",
@@ -224,8 +230,8 @@ export async function batch(requests: sheets_v4.Schema$Request[]) {
   } catch (error) {
     if (error instanceof AppError) throw error;
     safeLog("sheets_check_failed", "SHEETS_WRITE_FAILED");
-    throw new AppError(
-      503,
+    throw new FeatureUnavailable(
+      googleFailureCode(error),
       "Penulisan Google Sheets belum dapat dikonfirmasi. Coba kembali dengan idempotency key yang sama bila tersedia.",
     );
   }
@@ -641,7 +647,9 @@ export async function createTemperatureRecord(
   actor: Actor,
   key: string,
   hash: string,
+  progress: SaveProgress = () => {},
 ) {
+  progress("sheets_read");
   const ids = await ensureSheetHeaders();
   const existing = (await rows("AUDIT_LOG")).find(
     (r) => r[7] === key && r[2] === actor.id,
@@ -663,6 +671,8 @@ export async function createTemperatureRecord(
   );
   if (!signature)
     throw new AppError(400, "Tanda tangan tidak tersedia atau sudah digunakan");
+  progress("storage");
+  await verifySignatureFile(input.signatureId, signature);
   const policy = await getTemperaturePolicy(),
     deviceStates = prepareDeviceState(input, kind, policy);
   const now = new Date().toISOString();
@@ -683,12 +693,14 @@ export async function createTemperatureRecord(
     status: aggregateTemperatureStatus(deviceStates),
   };
   signature[2] = record.id;
+  progress("sheets_write");
   await batch([
     append(ids[config[kind].sheet], encode(record)),
     replace(ids.SIGNATURE_METADATA, signatures.indexOf(signature), signature),
     audit(ids, actor, "CREATE", record.id, null, record, key, hash),
     ...(await deviceWriteRequests(record, actor, ids)),
   ]);
+  progress("verification");
   const readBack = (await getRecords(kind)).find((r) => r.id === record.id);
   if (
     !readBack ||
@@ -707,7 +719,9 @@ export async function updateTemperatureRecord(
   id: string,
   input: MeasurementInput,
   actor: Actor,
+  progress: SaveProgress = () => {},
 ) {
+  progress("sheets_read");
   const ids = await ensureSheetHeaders();
   const data = await rows(config[kind].sheet);
   const index = data.findIndex((r) => r[0] === id);
@@ -742,12 +756,25 @@ export async function updateTemperatureRecord(
     policyVersion: policy.version,
     status: aggregateTemperatureStatus(deviceStates),
   };
+  progress("sheets_write");
   await batch([
     replace(ids[config[kind].sheet], index, encode(next)),
     audit(ids, actor, "UPDATE", id, old, next),
     ...(await deviceWriteRequests(next, actor, ids, old)),
   ]);
-  return next;
+  progress("verification");
+  const confirmed = (await getRecords(kind)).find((r) => r.id === id);
+  if (
+    !confirmed ||
+    confirmed.updatedAt !== next.updatedAt ||
+    JSON.stringify(confirmed.values) !== JSON.stringify(next.values) ||
+    JSON.stringify(confirmed.deviceStates) !== JSON.stringify(next.deviceStates)
+  )
+    throw new FeatureUnavailable(
+      "TEMPERATURE_PERSISTENCE_UNCONFIRMED",
+      "Perubahan belum dapat dikonfirmasi. Periksa riwayat sebelum mencoba lagi.",
+    );
+  return confirmed;
 }
 export async function deleteTemperatureRecord(
   kind: Kind,

@@ -1,21 +1,36 @@
 import { readLimited } from "@/lib/server/body";
-import { createHash } from "node:crypto";
+import { z } from "zod";
+import { persistSignature } from "@/lib/server/signature-persistence";
+import { temperatureSave } from "@/lib/server/save-diagnostics";
 import sharp from "sharp";
 import { requireActor, rateLimit } from "@/lib/server/auth";
-import { ok, fail, originCheck, AppError } from "@/lib/server/errors";
-import { putFile, locked } from "@/lib/server/storage";
-import { ensureSheetHeaders, batch, append, audit } from "@/lib/server/sheets";
+import { ok, originCheck, AppError } from "@/lib/server/errors";
+import { locked } from "@/lib/server/storage";
 export const runtime = "nodejs";
 export async function POST(req: Request) {
+  const operation = temperatureSave(
+    "signature",
+    req.headers.get("X-Temperature-Type") || "",
+  );
   try {
     originCheck(req);
     const actor = await requireActor();
     await rateLimit(`signature:${actor.id}`, 40);
     if (Number(req.headers.get("content-length") || 0) > 400000)
       throw new AppError(413, "Signature terlalu besar");
+    operation.progress("validation");
+    const headerKey = req.headers.get("Idempotency-Key");
+    const key = headerKey === null ? undefined : z.uuid().parse(headerKey);
     const raw = await readLimited(req, 300000);
     if (raw.length > 300000 || req.headers.get("content-type") !== "image/png")
       throw new AppError(400, "Signature harus PNG di bawah 300KB");
+    if (
+      !raw.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    )
+      throw new AppError(
+        400,
+        "Konten tanda tangan harus berupa PNG yang valid",
+      );
     const image = sharp(raw, { limitInputPixels: 1000000 });
     const meta = await image.metadata();
     if (
@@ -34,24 +49,14 @@ export async function POST(req: Request) {
     const stats = await sharp(data).stats();
     if (stats.channels.slice(0, 3).every((c) => c.stdev < 2))
       throw new AppError(400, "Tanda tangan kosong");
-    const id = crypto.randomUUID();
-    await locked(async () => {
-      await putFile(`${id}.png`, data);
-      const ids = await ensureSheetHeaders();
-      await batch([
-        append(ids.SIGNATURE_METADATA, [
-          id,
-          actor.id,
-          "",
-          new Date().toISOString(),
-          `${id}.png`,
-          createHash("sha256").update(data).digest("hex"),
-        ]),
-        audit(ids, actor, "UPLOAD_SIGNATURE", id, null, { id }),
-      ]);
-    });
-    return ok({ id }, "Signature tersimpan", 201);
+    operation.progress("storage");
+    const id = await locked(() =>
+      persistSignature(data, actor, key, operation.progress),
+    );
+    return operation.complete(
+      ok({ id }, "Signature tersimpan dan terverifikasi", 201),
+    );
   } catch (e) {
-    return fail(e);
+    return operation.failed(e);
   }
 }

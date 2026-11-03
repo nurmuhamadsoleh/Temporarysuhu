@@ -3,7 +3,7 @@ import {
   type DeviceState,
   type TemperaturePolicy,
 } from "./temperature-policy";
-import { z } from "zod";
+import { z } from "./validation";
 import { isValid, parse, format } from "date-fns";
 export const kinds = ["chiller", "freezer"] as const;
 export type Kind = (typeof kinds)[number];

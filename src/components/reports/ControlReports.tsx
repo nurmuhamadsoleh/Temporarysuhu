@@ -1,4 +1,5 @@
 "use client";
+import { signatureBlob } from "@/lib/client/canvas";
 import { useEffect, useRef, useState } from "react";
 import {
   Button,
@@ -755,9 +756,7 @@ export function ControlReports({
                   throw new Error(
                     "Snapshot dan tanda tangan pemeriksa wajib tersedia",
                   );
-                const blob = await (
-                  await fetch(pad.current.toDataURL("image/png"))
-                ).blob();
+                const blob = await signatureBlob(pad.current.getCanvas());
                 const signature = await api<{ id: string }>("/api/signatures", {
                   method: "POST",
                   headers: { "Content-Type": "image/png" },

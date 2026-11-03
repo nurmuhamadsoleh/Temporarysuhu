@@ -1,6 +1,11 @@
+const signatureBytes = Buffer.from("fixture signature file");
+const signatureHash = createHash("sha256").update(signatureBytes).digest("hex");
 import { emptyDeviceInput } from "@/lib/temperature-policy";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
+vi.mock("@/lib/server/storage", () => ({
+  getFile: async () => Buffer.from("fixture signature file"),
+}));
 const testPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
   .privateKey.export({ type: "pkcs8", format: "pem" })
   .toString();
@@ -84,7 +89,16 @@ describe("Sheets API", () => {
         const name = range.split("'")[1];
         const extra =
           name === "SIGNATURE_METADATA"
-            ? [[input.signatureId, actor.id, ""]]
+            ? [
+                [
+                  input.signatureId,
+                  actor.id,
+                  "",
+                  "at",
+                  input.signatureId + ".png",
+                  signatureHash,
+                ],
+              ]
             : name === "TEMPERATURE_DEVICE_STATES" && meta
               ? [meta]
               : name === sheet && stored

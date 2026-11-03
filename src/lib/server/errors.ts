@@ -15,8 +15,11 @@ export const ok = (data: unknown, message = "Berhasil", status = 200) =>
     { success: true, data, message, error: null },
     { status, headers: { "Cache-Control": "no-store" } },
   );
-export function fail(error: unknown) {
-  const requestId = crypto.randomUUID();
+export function fail(
+  error: unknown,
+  context?: { requestId: string; stage?: string; reason?: string },
+) {
+  const requestId = context?.requestId ?? crypto.randomUUID();
   if (!(error instanceof AppError) && !(error instanceof ZodError))
     safeLog("request_failed", "INTERNAL", requestId);
   const status =
@@ -34,7 +37,17 @@ export function fail(error: unknown) {
             .join("; ")
         : "Layanan belum tersedia. Periksa koneksi, akses Google Sheets, dan konfigurasi server.";
   return NextResponse.json(
-    { success: false, data: null, message, error: { code: status } },
+    {
+      success: false,
+      data: null,
+      message,
+      error: {
+        code: status,
+        ...(context?.reason ? { reason: context.reason } : {}),
+        ...(context?.stage ? { stage: context.stage } : {}),
+        requestId,
+      },
+    },
     {
       status,
       headers: { "Cache-Control": "no-store", "X-Request-ID": requestId },

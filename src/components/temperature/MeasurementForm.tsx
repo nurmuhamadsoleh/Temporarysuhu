@@ -1,5 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
+import { signatureBlob } from "@/lib/client/canvas";
+import { ApiError } from "@/lib/client/api";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import type SignatureCanvas from "react-signature-canvas";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
@@ -75,9 +77,16 @@ export function MeasurementForm({
     canvas = useRef<SignatureCanvas>(null),
     pending = useRef<{
       content: string;
-      signatureId: string;
+      signatureId: string | null;
+      signatureKey: string;
+      signatureRevision: number;
+      blob: Blob | null;
       key: string;
     } | null>(null),
+    signatureRevision = useRef(0),
+    saving = useRef(false),
+    [saveError, setSaveError] = useState(""),
+    [sessionExpired, setSessionExpired] = useState(false),
     [busy, setBusy] = useState(false),
     [preview, setPreview] = useState(""),
     [editing, setEditing] = useState<Measurement | null>(null),
@@ -115,91 +124,140 @@ export function MeasurementForm({
     setPreview("");
     setEditing(null);
     pending.current = null;
+    signatureRevision.current = 0;
+    setSaveError("");
+    setSessionExpired(false);
   };
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
-    void handleSubmit(async (fields) => {
-      setBusy(true);
-      try {
-        let signatureId = editing?.signatureId;
-        const numeric = fields.values.map((v) =>
-          v === null ? null : normalize(v),
-        );
-        if (
-          numeric.some(
-            (v) =>
-              v !== null && !temperatureValueSchema(kind).safeParse(v).success,
+    event.preventDefault();
+    if (saving.current) return;
+    saving.current = true;
+    void handleSubmit(
+      async (fields) => {
+        setBusy(true);
+        setSaveError("");
+        setSessionExpired(false);
+        try {
+          let signatureId = editing?.signatureId;
+          const numeric = fields.values.map((v) =>
+            v === null ? null : normalize(v),
+          );
+          if (
+            numeric.some(
+              (v) =>
+                v !== null &&
+                !temperatureValueSchema(kind).safeParse(v).success,
+            )
           )
-        )
-          throw new Error(
-            "Konfirmasikan seluruh suhu dengan presisi 0,1°C dalam rentang yang diizinkan",
-          );
-        if (!sopData.data)
-          throw new Error("Kebijakan suhu belum berhasil dimuat. Coba lagi.");
-        const validation = validateDeviceInputs(
-          kind,
-          numeric,
-          fields.devices,
-          policy,
-        );
-        if (validation.length)
-          throw new Error(
-            validation
-              .map((e) => `${cfg.label} ${e.deviceNumber}: ${e.message}`)
-              .join("; "),
-          );
-        if (!editing) {
-          if (!canvas.current || canvas.current.isEmpty())
-            throw new Error("Tanda tangan petugas wajib diisi");
-          const image = canvas.current.toDataURL("image/png"),
-            content = JSON.stringify({ ...fields, image });
-          if (pending.current && pending.current.content !== content)
             throw new Error(
-              "Request sebelumnya belum dikonfirmasi. Kembalikan isian semula untuk retry, atau periksa riwayat sebelum mereset form.",
+              "Konfirmasikan seluruh suhu dengan presisi 0,1°C dalam rentang yang diizinkan",
             );
-          if (!pending.current) {
-            const blob = await (await fetch(image)).blob();
-            const signature = await api<{ id: string }>("/api/signatures", {
-              method: "POST",
-              headers: { "Content-Type": "image/png" },
-              body: blob,
-            });
-            pending.current = {
-              content,
-              signatureId: signature.id,
-              key: crypto.randomUUID(),
-            };
+          if (!sopData.data)
+            throw new Error("Kebijakan suhu belum berhasil dimuat. Coba lagi.");
+          const validation = validateDeviceInputs(
+            kind,
+            numeric,
+            fields.devices,
+            policy,
+          );
+          if (validation.length)
+            throw new Error(
+              validation
+                .map((e) => `${cfg.label} ${e.deviceNumber}: ${e.message}`)
+                .join("; "),
+            );
+          if (!editing) {
+            if (!canvas.current || canvas.current.isEmpty())
+              throw new Error("Tanda tangan petugas wajib diisi");
+            const content = JSON.stringify(fields);
+            if (
+              pending.current &&
+              (pending.current.content !== content ||
+                pending.current.signatureRevision !== signatureRevision.current)
+            )
+              throw new Error(
+                "Request sebelumnya belum dikonfirmasi. Kembalikan isian semula untuk retry, atau periksa riwayat sebelum mereset form.",
+              );
+            if (!pending.current)
+              pending.current = {
+                content,
+                signatureRevision: signatureRevision.current,
+                blob: null,
+                signatureId: null,
+                signatureKey: crypto.randomUUID(),
+                key: crypto.randomUUID(),
+              };
+            if (!pending.current.signatureId) {
+              // Retain the exact encoded image across retries and canvas resize.
+              const blob =
+                pending.current.blob ??
+                (await signatureBlob(canvas.current.getCanvas()));
+              pending.current.blob = blob;
+              const signature = await api<{ id: string }>("/api/signatures", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "image/png",
+                  "Idempotency-Key": pending.current.signatureKey,
+                  "X-Temperature-Type": kind,
+                },
+                body: blob,
+              });
+              pending.current.signatureId = signature.id;
+            }
+            signatureId = pending.current.signatureId;
           }
-          signatureId = pending.current.signatureId;
+          const saved = await api<Measurement>(
+            `/api/temperatures/${kind}${editing ? `/${editing.id}` : ""}`,
+            {
+              method: editing ? "PATCH" : "POST",
+              headers: editing
+                ? {}
+                : { "Idempotency-Key": pending.current!.key },
+              body: JSON.stringify({
+                date: fields.date,
+                time: fields.time,
+                values: numeric,
+                devices: fields.devices,
+                policyVersion: policy.version,
+                notes: fields.notes,
+                signatureId,
+                ...(editing ? { version: editing.updatedAt } : {}),
+              }),
+            },
+          );
+          if (
+            !saved?.id ||
+            saved.kind !== kind ||
+            JSON.stringify(saved.values) !== JSON.stringify(numeric)
+          )
+            throw new ApiError(
+              "Respons penyimpanan belum dapat diverifikasi. Pertahankan isian dan periksa riwayat sebelum mengulangi.",
+              "response",
+            );
+          toast.success(
+            editing ? "Perubahan tersimpan" : "Data tersimpan di Google Sheets",
+          );
+          resetForm();
+          window.dispatchEvent(new Event("tempcontrol:measurements-updated"));
+          router.refresh();
+        } catch (e) {
+          const message =
+            (e as Error).message +
+            (e instanceof ApiError && e.requestId
+              ? " Kode bantuan: " + e.requestId
+              : "");
+          setSaveError(message);
+          setSessionExpired(e instanceof ApiError && e.status === 401);
+          toast.error(message);
+        } finally {
+          setBusy(false);
+          saving.current = false;
         }
-        await api(
-          `/api/temperatures/${kind}${editing ? `/${editing.id}` : ""}`,
-          {
-            method: editing ? "PATCH" : "POST",
-            headers: editing ? {} : { "Idempotency-Key": pending.current!.key },
-            body: JSON.stringify({
-              date: fields.date,
-              time: fields.time,
-              values: numeric,
-              devices: fields.devices,
-              policyVersion: policy.version,
-              notes: fields.notes,
-              signatureId,
-              ...(editing ? { version: editing.updatedAt } : {}),
-            }),
-          },
-        );
-        toast.success(
-          editing ? "Perubahan tersimpan" : "Data tersimpan di Google Sheets",
-        );
-        resetForm();
-        window.dispatchEvent(new Event("tempcontrol:measurements-updated"));
-        router.refresh();
-      } catch (e) {
-        toast.error((e as Error).message);
-      } finally {
-        setBusy(false);
-      }
-    })(event);
+      },
+      () => {
+        saving.current = false;
+      },
+    )(event);
   };
   const edit = (r: Measurement) => {
     setEditing(r);
@@ -267,6 +325,17 @@ export function MeasurementForm({
               {cfg.count} unit {cfg.label}
             </span>
           </div>
+          {saveError && (
+            <div role="alert" className="sop-notice mb-4">
+              <p>{saveError}</p>
+              {sessionExpired && (
+                <a href="/login" target="_blank" rel="noopener noreferrer">
+                  Masuk kembali di tab baru dengan akun yang sama, lalu coba
+                  simpan lagi.
+                </a>
+              )}
+            </div>
+          )}
           <fieldset disabled={busy}>
             <div className="grid gap-5 md:grid-cols-3">
               <label>
@@ -463,12 +532,19 @@ export function MeasurementForm({
                   </>
                 ) : (
                   <>
-                    <SignaturePad padRef={canvas} />
+                    <SignaturePad
+                      padRef={canvas}
+                      disabled={busy}
+                      onChange={() => {
+                        signatureRevision.current++;
+                      }}
+                    />
                     <div className="flex gap-4 mt-2">
                       <button
                         type="button"
                         className="text-link"
                         onClick={() => {
+                          signatureRevision.current++;
                           canvas.current?.clear();
                           setPreview("");
                         }}

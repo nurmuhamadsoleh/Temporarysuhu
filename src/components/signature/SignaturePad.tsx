@@ -5,9 +5,13 @@ import { fitSignaturePoints } from "@/lib/signature-layout";
 export function SignaturePad({
   padRef,
   label = "Area menggambar tanda tangan",
+  onChange,
+  disabled = false,
 }: {
   padRef: RefObject<SignatureCanvas | null>;
   label?: string;
+  onChange?: () => void;
+  disabled?: boolean;
 }) {
   useEffect(() => {
     const pad = padRef.current;
@@ -58,8 +62,14 @@ export function SignaturePad({
       <SignatureCanvas
         ref={padRef}
         penColor="#172554"
+        onEnd={onChange}
         clearOnResize={false}
-        canvasProps={{ className: "signature-canvas", "aria-label": label }}
+        canvasProps={{
+          className: "signature-canvas",
+          "aria-label": label,
+          "aria-disabled": disabled,
+          style: disabled ? { pointerEvents: "none" } : undefined,
+        }}
       />
       <span className="signature-hint">
         Tanda tangan di area ini menggunakan mouse atau sentuhan

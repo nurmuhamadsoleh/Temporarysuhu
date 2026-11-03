@@ -1,5 +1,10 @@
+const signatureBytes = Buffer.from("fixture signature file");
+const signatureHash = createHash("sha256").update(signatureBytes).digest("hex");
 import { beforeEach, expect, it, vi } from "vitest";
-import { generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
+vi.mock("@/lib/server/storage", () => ({
+  getFile: async () => Buffer.from("fixture signature file"),
+}));
 const testPrivateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
   .privateKey.export({ type: "pkcs8", format: "pem" })
   .toString();
@@ -97,7 +102,14 @@ beforeEach(() => {
 });
 function input() {
   const signatureId = crypto.randomUUID();
-  tables.SIGNATURE_METADATA.push([signatureId, actor.id, ""]);
+  tables.SIGNATURE_METADATA.push([
+    signatureId,
+    actor.id,
+    "",
+    "at",
+    signatureId + ".png",
+    signatureHash,
+  ]);
   return measurementSchema("chiller").parse({
     date: "2026-11-02",
     time: "03:00",

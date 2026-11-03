@@ -11,6 +11,7 @@ import { ok, fail, AppError, originCheck } from "@/lib/server/errors";
 import { locked } from "@/lib/server/storage";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { temperatureSave } from "@/lib/server/save-diagnostics";
 export const runtime = "nodejs";
 type Context = { params: Promise<{ kind: string }> };
 export async function GET(req: Request, c: Context) {
@@ -30,25 +31,37 @@ export async function GET(req: Request, c: Context) {
   }
 }
 export async function POST(req: Request, c: Context) {
+  const { kind } = await c.params;
+  const operation = temperatureSave("create", kind);
   try {
     originCheck(req);
     const actor = await requireActor(["ADMIN", "PETUGAS"]);
-    const { kind } = await c.params;
     if (!Object.hasOwn(config, kind))
       throw new AppError(404, "Jenis tidak valid");
+    operation.progress("validation");
     const input = measurementSchema(kind as Kind).parse(await readJson(req));
     const key = z.uuid().parse(req.headers.get("Idempotency-Key"));
     const hash = createHash("sha256")
       .update(JSON.stringify({ kind, input }))
       .digest("hex");
-    return ok(
-      await locked(() =>
-        createTemperatureRecord(kind as Kind, input, actor, key, hash),
+    operation.progress("storage");
+    return operation.complete(
+      ok(
+        await locked(() =>
+          createTemperatureRecord(
+            kind as Kind,
+            input,
+            actor,
+            key,
+            hash,
+            operation.progress,
+          ),
+        ),
+        "Data tersimpan dan terverifikasi",
+        201,
       ),
-      "Data tersimpan dan terverifikasi",
-      201,
     );
   } catch (e) {
-    return fail(e);
+    return operation.failed(e);
   }
 }

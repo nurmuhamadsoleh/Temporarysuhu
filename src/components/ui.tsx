@@ -2,22 +2,8 @@
 import { statusPalette } from "@/lib/temperature-policy";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { AlertCircle, RefreshCw, Inbox } from "lucide-react";
-export async function api<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      ...(options?.body instanceof Blob
-        ? {}
-        : { "Content-Type": "application/json" }),
-      ...options?.headers,
-    },
-    cache: "no-store",
-  });
-  const body = await res.json();
-  if (!res.ok || !body.success)
-    throw new Error(body.message || "Request gagal");
-  return body.data;
-}
+import { api } from "@/lib/client/api";
+export { api };
 export function useData<T>(url: string, initialData?: T) {
   const requestNumber = useRef({ value: 0 });
   const [data, setData] = useState<T | null>(initialData ?? null),

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./validation";
 import type { Kind } from "./domain";
 
 const decimal = z

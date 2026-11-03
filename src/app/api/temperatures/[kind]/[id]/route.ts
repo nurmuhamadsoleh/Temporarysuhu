@@ -1,3 +1,4 @@
+import { temperatureSave } from "@/lib/server/save-diagnostics";
 import { readJson } from "@/lib/server/body";
 import { config, measurementSchema, type Kind } from "@/lib/domain";
 import { requireActor } from "@/lib/server/auth";
@@ -28,16 +29,23 @@ export async function GET(_: Request, c: Context) {
   }
 }
 export async function PATCH(req: Request, c: Context) {
+  const operation = temperatureSave("update", (await c.params).kind);
   try {
     originCheck(req);
     const actor = await requireActor(["ADMIN", "PETUGAS"]);
     const { kind, id } = await params(c);
+    operation.progress("validation");
     const input = measurementSchema(kind).parse(await readJson(req));
-    return ok(
-      await locked(() => updateTemperatureRecord(kind, id, input, actor)),
+    operation.progress("storage");
+    return operation.complete(
+      ok(
+        await locked(() =>
+          updateTemperatureRecord(kind, id, input, actor, operation.progress),
+        ),
+      ),
     );
   } catch (e) {
-    return fail(e);
+    return operation.failed(e);
   }
 }
 export async function DELETE(req: Request, c: Context) {

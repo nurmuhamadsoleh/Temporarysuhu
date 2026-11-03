@@ -1,4 +1,5 @@
 "use client";
+import { signatureBlob } from "@/lib/client/canvas";
 import { Tabs } from "antd";
 import dynamic from "next/dynamic";
 const ControlReports = dynamic(
@@ -49,9 +50,7 @@ function LegacyReports({ actor }: { actor: Actor }) {
     }
     setBusy(true);
     try {
-      const blob = await (
-        await fetch(approvalPad.current.toDataURL("image/png"))
-      ).blob();
+      const blob = await signatureBlob(approvalPad.current.getCanvas());
       const signature = await api<{ id: string }>("/api/signatures", {
         method: "POST",
         headers: { "Content-Type": "image/png" },
