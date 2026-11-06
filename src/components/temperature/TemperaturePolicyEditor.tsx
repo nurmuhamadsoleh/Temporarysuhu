@@ -2,7 +2,11 @@
 import { Button, Form, InputNumber, Switch } from "antd";
 import { toast } from "sonner";
 import { api, useData, ErrorBox, Loading } from "@/components/ui";
-import type { TemperaturePolicy, PolicyBounds } from "@/lib/temperature-policy";
+import {
+  FREEZER_TEMPERATURE_POLICY,
+  type TemperaturePolicy,
+  type PolicyBounds,
+} from "@/lib/temperature-policy";
 import { useState } from "react";
 export function TemperaturePolicyEditor() {
   const { data, error, loading, refresh } = useData<TemperaturePolicy>(
@@ -60,6 +64,14 @@ export function TemperaturePolicyEditor() {
         {(["chiller", "freezer"] as const).map((k) => (
           <section key={k} className="sensor-card min-w-0">
             <h3 className="capitalize">SOP {k}</h3>
+            {k === "freezer" && (
+              <p className="caption mb-3">
+                Batas awal normal {FREEZER_TEMPERATURE_POLICY.normalMin}°C s/d{" "}
+                {FREEZER_TEMPERATURE_POLICY.normalMax}°C; batas atas Warning{" "}
+                {FREEZER_TEMPERATURE_POLICY.warningMax}°C. Perubahan disimpan
+                sebagai versi SOP baru.
+              </p>
+            )}
             <Form.Item
               name={[k, "enabled"]}
               label="Batas SOP ditetapkan"

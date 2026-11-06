@@ -1,4 +1,10 @@
 import {
+  MAX_DEVICE_NUMBER,
+  measurementIndex,
+  measurementRefs,
+} from "@/lib/devices";
+import { getRecordedTemperatureStatus } from "@/lib/temperature-policy";
+import {
   type TemperatureStatusCode,
   type actionStatuses,
 } from "@/lib/temperature-policy";
@@ -16,7 +22,7 @@ import {
 export const controlFilterSchema = z
   .object({
     kind: z.enum(["chiller", "freezer"]),
-    deviceNumber: z.coerce.number().int().min(1).max(5),
+    deviceNumber: z.coerce.number().int().min(1).max(MAX_DEVICE_NUMBER),
     month: z.coerce.number().int().min(1).max(12),
     year: z.coerce.number().int().min(2000).max(2100),
     from: dateSchema.optional(),
@@ -26,12 +32,6 @@ export const controlFilterSchema = z
   })
   .strict()
   .superRefine((v, ctx) => {
-    if (v.deviceNumber > config[v.kind].count)
-      ctx.addIssue({
-        code: "custom",
-        message: "Nomor perangkat tidak tersedia",
-        path: ["deviceNumber"],
-      });
     const prefix = `${v.year}-${String(v.month).padStart(2, "0")}-`;
     if (
       (v.from && !v.from.startsWith(prefix)) ||
@@ -80,6 +80,7 @@ export type TemperatureDevice = {
 };
 export type TemperatureReading = {
   recordId: string;
+  deviceId?: string;
   deviceType: Kind;
   deviceNumber: number;
   timestamp: string;
@@ -100,6 +101,7 @@ export type TemperatureCorrection = {
   recordId: string;
   deviceType: Kind;
   deviceNumber: number;
+  deviceId?: string;
   date: string;
   time: string;
   description: string;
@@ -154,6 +156,7 @@ export type TemperatureReport = {
   device: TemperatureDevice;
   settings: ReportConfig;
   sop: { min: number; max: number } | null;
+  normalRangeNote?: string;
   readings: TemperatureReading[];
   corrections: TemperatureCorrection[];
   pages: ControlPage[];
@@ -164,7 +167,7 @@ export const correctionInputSchema = z
   .object({
     recordId: z.uuid(),
     deviceType: z.enum(["chiller", "freezer"]),
-    deviceNumber: z.number().int().min(1).max(5),
+    deviceNumber: z.number().int().min(1).max(MAX_DEVICE_NUMBER),
     date: dateSchema,
     time: timeSchema,
     description: z.string().trim().min(1).max(2000),
@@ -231,11 +234,13 @@ export function normalizeReadings(
   const bound = sop[f.kind];
   const seen = new Set<string>();
   return selectControlRecords(records, f)
+    .filter((r) => measurementIndex(r, f.deviceNumber) >= 0)
     .map<TemperatureReading>((r) => {
       if (seen.has(r.id))
         throw new Error("RECORD ID duplikat pada sumber laporan");
       seen.add(r.id);
-      const value = r.values[f.deviceNumber - 1];
+      const index = measurementIndex(r, f.deviceNumber);
+      const value = r.values[index];
       if (
         value !== null &&
         (typeof value !== "number" || !Number.isFinite(value))
@@ -245,6 +250,7 @@ export function normalizeReadings(
         recordId: r.id,
         deviceType: f.kind,
         deviceNumber: f.deviceNumber,
+        ...(r.deviceRefs ? { deviceId: measurementRefs(r)[index].id } : {}),
         date: r.date,
         time: r.time,
         timestamp: `${r.date}T${r.time}:00+07:00`,
@@ -253,15 +259,21 @@ export function normalizeReadings(
         operatorName: r.officer,
         signatureReference: r.signatureId || "",
         status:
-          r.deviceStates?.[f.deviceNumber - 1]?.temperatureStatus ??
-          (value === null
+          value === null
             ? "UNFILLED"
-            : !bound
-              ? "BELUM DIKONFIGURASI"
-              : value < bound.min || value > bound.max
-                ? "ALERT"
-                : "NORMAL"),
-        notes: [r.notes, r.deviceStates?.[f.deviceNumber - 1]?.missingReason]
+            : ((f.kind === "freezer"
+                ? r.policy || r.deviceStates
+                  ? getRecordedTemperatureStatus(r, index)
+                  : "BELUM DIKONFIGURASI"
+                : r.deviceStates?.[index]?.temperatureStatus) ??
+              (value === null
+                ? "UNFILLED"
+                : !bound
+                  ? "BELUM DIKONFIGURASI"
+                  : value < bound.min || value > bound.max
+                    ? "ALERT"
+                    : "NORMAL")),
+        notes: [r.notes, r.deviceStates?.[index]?.missingReason]
           .filter(Boolean)
           .join("\n"),
         ...(r.policyVersion ? { policyVersion: r.policyVersion } : {}),

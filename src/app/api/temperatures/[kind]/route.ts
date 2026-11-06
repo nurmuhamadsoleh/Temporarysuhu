@@ -39,7 +39,9 @@ export async function POST(req: Request, c: Context) {
     if (!Object.hasOwn(config, kind))
       throw new AppError(404, "Jenis tidak valid");
     operation.progress("validation");
-    const input = measurementSchema(kind as Kind).parse(await readJson(req));
+    const input = measurementSchema(kind as Kind).parse(
+      await readJson(req, 2_000_000),
+    );
     const key = z.uuid().parse(req.headers.get("Idempotency-Key"));
     const hash = createHash("sha256")
       .update(JSON.stringify({ kind, input }))

@@ -44,7 +44,13 @@ import {
   type Measurement,
   type Sop,
 } from "@/lib/domain";
+import {
+  statusPalette,
+  type TemperatureStatusCode,
+} from "@/lib/temperature-policy";
+import type { TemperatureDeviceConfig } from "@/lib/devices";
 type Data = {
+  devices: TemperatureDeviceConfig[];
   records: Measurement[];
   sop: Sop;
   statistics: {
@@ -53,6 +59,7 @@ type Data = {
     chillerAverage: number | null;
     freezerAverage: number | null;
     alerts: number;
+    freezerStatusCounts: Record<TemperatureStatusCode, number>;
     signedReports: number;
   };
 };
@@ -197,7 +204,10 @@ export function Dashboard() {
                   value: s.alerts,
                   icon: TriangleAlert,
                   color: "amber",
-                  sub: "Pembacaan sensor · SOP saat ini",
+                  sub:
+                    kind === "chiller"
+                      ? "Pembacaan sensor · SOP saat ini"
+                      : "Freezer memakai penilaian SOP saat pencatatan",
                 },
                 {
                   label: "Laporan ditandatangani",
@@ -219,6 +229,49 @@ export function Dashboard() {
                 </div>
               ))}
             </div>
+            {kind !== "chiller" && (
+              <section
+                className="panel mb-5"
+                aria-label="Ringkasan status Freezer"
+              >
+                <div className="panel-title">
+                  <div>
+                    <h2>Status pembacaan Freezer</h2>
+                    <p>Menggunakan versi SOP saat pengukuran dicatat.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  {(
+                    [
+                      "NORMAL",
+                      "WARNING",
+                      "HIGH_TEMPERATURE",
+                      "LOW_TEMPERATURE",
+                    ] as const
+                  ).map((code) => (
+                    <div
+                      key={code}
+                      className="rounded-xl p-4"
+                      style={{ background: statusPalette[code].background }}
+                    >
+                      <span style={{ color: statusPalette[code].color }}>
+                        {statusPalette[code].label}
+                      </span>
+                      <strong
+                        className="block text-2xl"
+                        style={{ color: statusPalette[code].color }}
+                      >
+                        {s.freezerStatusCounts[code]}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+                <p className="caption mt-3">
+                  Belum diisi: {s.freezerStatusCounts.UNFILLED} · Tanpa
+                  penilaian SOP tersimpan: {s.freezerStatusCounts.UNKNOWN_SOP}
+                </p>
+              </section>
+            )}
             <div className="grid gap-5 xl:grid-cols-2">
               {(["chiller", "freezer"] as const).map((k) => (
                 <section key={k} className="panel">
@@ -237,7 +290,11 @@ export function Dashboard() {
                     </span>
                   </div>
                   {data.records.some((r) => r.kind === k) ? (
-                    <Trend records={data.records} kind={k} />
+                    <Trend
+                      records={data.records}
+                      kind={k}
+                      devices={data.devices}
+                    />
                   ) : (
                     <Empty />
                   )}

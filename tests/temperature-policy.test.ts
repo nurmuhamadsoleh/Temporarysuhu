@@ -23,9 +23,9 @@ describe("Shared temperature policy", () => {
       "WARNING",
     ));
   it("never borrows Chiller SOP for Freezer", () => {
-    expect(getTemperatureStatus("freezer", -18.5, policy).code).toBe(
-      "UNKNOWN_SOP",
-    );
+    expect(
+      getTemperatureStatus("freezer", -18.5, { ...policy, freezer: null }).code,
+    ).toBe("UNKNOWN_SOP");
     expect(getTemperatureStatus("freezer", null, policy).code).toBe("UNFILLED");
     const freezer = {
       ...policy,
@@ -49,7 +49,7 @@ describe("Shared temperature policy", () => {
     );
     expect(errors.map((e) => e.deviceNumber)).toEqual([3, 4, 5]);
     expect(
-      validateDeviceInputs("freezer", [-18.5], [emptyDeviceInput()], policy),
+      validateDeviceInputs("freezer", [-15.5], [emptyDeviceInput()], policy),
     ).toEqual([]);
   });
   it("does not infer a completed action from a temperature status", () => {

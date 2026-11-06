@@ -47,7 +47,8 @@ it.each([
 );
 it("rejects invalid device numbers, invalid dates and cross-month filters", () => {
   expect(
-    controlFilterSchema.safeParse({ ...fixtureFilter("freezer", 5) }).success,
+    controlFilterSchema.safeParse({ ...fixtureFilter("freezer", 10001) })
+      .success,
   ).toBe(false);
   expect(
     controlFilterSchema.safeParse({ ...fixtureFilter(), from: "2026-11-31" })

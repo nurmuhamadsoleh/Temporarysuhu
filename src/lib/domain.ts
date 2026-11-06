@@ -4,6 +4,15 @@ import {
   type TemperaturePolicy,
 } from "./temperature-policy";
 import { z } from "./validation";
+import {
+  LEGACY_DEVICE_COUNTS,
+  DEFAULT_CHILLER_COUNT,
+  DEFAULT_FREEZER_COUNT,
+  MAX_MEASUREMENT_DEVICES,
+  MAX_DEVICE_NUMBER,
+  type DeviceRef,
+} from "./devices";
+import { FREEZER_TEMPERATURE_POLICY } from "@/config/temperature";
 import { isValid, parse, format } from "date-fns";
 export const kinds = ["chiller", "freezer"] as const;
 export type Kind = (typeof kinds)[number];
@@ -20,7 +29,7 @@ export type Actor = {
 export const config = {
   chiller: {
     label: "Chiller",
-    count: 5,
+    count: DEFAULT_CHILLER_COUNT,
     min: -2,
     max: 14,
     options: [-2, 0, 2, 4, 6, 8, 10, 12, 14],
@@ -28,9 +37,9 @@ export const config = {
   },
   freezer: {
     label: "Freezer",
-    count: 4,
-    min: -22,
-    max: -6,
+    count: DEFAULT_FREEZER_COUNT,
+    min: FREEZER_TEMPERATURE_POLICY.minSlider,
+    max: FREEZER_TEMPERATURE_POLICY.maxSlider,
     options: [-22, -20, -18, -16, -14, -12, -10, -8, -6],
     sheet: "Suhu Freezer",
   },
@@ -73,8 +82,27 @@ export function measurementSchema(kind: Kind) {
       time: timeSchema,
       values: z
         .array(temperatureValueSchema(kind).nullable())
-        .length(config[kind].count),
-      devices: z.array(deviceInputSchema).length(config[kind].count).optional(),
+        .min(1)
+        .max(MAX_MEASUREMENT_DEVICES),
+      devices: z
+        .array(deviceInputSchema)
+        .max(MAX_MEASUREMENT_DEVICES)
+        .optional(),
+      deviceRefs: z
+        .array(
+          z
+            .object({
+              id: z
+                .string()
+                .min(1)
+                .max(100)
+                .regex(/^[a-zA-Z0-9-]+$/),
+              number: z.number().int().min(1).max(MAX_DEVICE_NUMBER),
+            })
+            .strict(),
+        )
+        .max(MAX_MEASUREMENT_DEVICES)
+        .optional(),
       notes: z.string().max(2000).default(""),
       signatureId: z.uuid(),
       version: z.string().optional(),
@@ -82,6 +110,38 @@ export function measurementSchema(kind: Kind) {
     })
     .strict()
     .superRefine((input, ctx) => {
+      if (
+        !input.deviceRefs &&
+        input.values.length !== LEGACY_DEVICE_COUNTS[kind]
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["values"],
+          message: "Daftar perangkat wajib untuk jumlah input dinamis",
+        });
+      if (input.devices && input.devices.length !== input.values.length)
+        ctx.addIssue({
+          code: "custom",
+          path: ["devices"],
+          message: "Koreksi harus sesuai setiap perangkat",
+        });
+      if (
+        input.deviceRefs &&
+        (input.deviceRefs.length !== input.values.length ||
+          new Set(input.deviceRefs.map((d) => d.id)).size !==
+            input.deviceRefs.length ||
+          new Set(input.deviceRefs.map((d) => d.number)).size !==
+            input.deviceRefs.length ||
+          input.deviceRefs.some(
+            (d, i) => i > 0 && d.number <= input.deviceRefs![i - 1].number,
+          ))
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: ["deviceRefs"],
+          message:
+            "Identitas/nomor perangkat harus unik, berurutan dan sesuai pembacaan",
+        });
       input.values.forEach((value, index) => {
         if (value === null && !input.devices?.[index]?.missingReason.trim())
           ctx.addIssue({
@@ -94,6 +154,7 @@ export function measurementSchema(kind: Kind) {
 }
 export type MeasurementInput = z.infer<ReturnType<typeof measurementSchema>>;
 export type Measurement = MeasurementInput & {
+  deviceRefs?: DeviceRef[];
   id: string;
   kind: Kind;
   officer: string;

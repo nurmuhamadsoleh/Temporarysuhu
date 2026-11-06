@@ -13,6 +13,7 @@ import { Thermometer, Snowflake } from "lucide-react";
 import { config, normalize, temperature, type Kind } from "@/lib/domain";
 import {
   DEFAULT_TEMPERATURE_POLICY,
+  FREEZER_TEMPERATURE_POLICY,
   getTemperatureStatus,
   type TemperaturePolicy,
 } from "@/lib/temperature-policy";
@@ -46,8 +47,19 @@ export function TemperatureVerticalSlider({
     active = value ?? cfg.min;
   const effectivePolicy = policy ?? {
     ...DEFAULT_TEMPERATURE_POLICY,
-    ...(type === "freezer"
-      ? { freezer: sop ? { ...sop, warningMax: null } : null }
+    ...(type === "freezer" && sop !== undefined
+      ? {
+          freezer: sop
+            ? {
+                ...sop,
+                warningMax:
+                  sop.min === FREEZER_TEMPERATURE_POLICY.normalMin &&
+                  sop.max === FREEZER_TEMPERATURE_POLICY.normalMax
+                    ? FREEZER_TEMPERATURE_POLICY.warningMax
+                    : null,
+              }
+            : null,
+        }
       : {}),
   };
   const status = getTemperatureStatus(type, value, effectivePolicy);
@@ -114,7 +126,7 @@ export function TemperatureVerticalSlider({
               included
               min={cfg.min}
               max={cfg.max}
-              step={0.1}
+              step={type === "freezer" ? FREEZER_TEMPERATURE_POLICY.step : 0.1}
               marks={marks}
               value={active}
               disabled={disabled}
@@ -127,6 +139,7 @@ export function TemperatureVerticalSlider({
               }
               tooltip={{
                 open: true,
+                ...(type === "freezer" ? { color: status.color } : {}),
                 zIndex: 900,
                 placement: "right",
                 formatter: (v) =>

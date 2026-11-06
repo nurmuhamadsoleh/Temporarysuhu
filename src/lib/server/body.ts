@@ -22,10 +22,10 @@ export async function readLimited(req: Request, max = 65536) {
   }
   return Buffer.concat(chunks);
 }
-export async function readJson(req: Request): Promise<unknown> {
+export async function readJson(req: Request, max = 65536): Promise<unknown> {
   try {
     return JSON.parse(
-      (await readLimited(req)).toString("utf8"),
+      (await readLimited(req, max)).toString("utf8"),
       (key, value) => {
         if (["__proto__", "prototype", "constructor"].includes(key))
           throw new AppError(400, "Properti JSON tidak diizinkan");

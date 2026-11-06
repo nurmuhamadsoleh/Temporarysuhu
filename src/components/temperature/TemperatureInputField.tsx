@@ -1,0 +1,94 @@
+"use client";
+import { Card, Input, Tag, Typography, Button } from "antd";
+import type { ReactNode } from "react";
+import type { Kind } from "@/lib/domain";
+import type { getTemperatureStatus } from "@/lib/temperature-policy";
+export type TemperatureInputFieldProps = {
+  id: string;
+  deviceType: Kind;
+  deviceNumber: number;
+  value: string | number | null;
+  status: ReturnType<typeof getTemperatureStatus> | null;
+  onChange: (text: string) => void;
+  onBlur?: () => void;
+  onRemove?: () => void;
+  disabled?: boolean;
+  error?: string;
+  children?: ReactNode;
+};
+export function TemperatureInputField({
+  id,
+  deviceType,
+  deviceNumber,
+  value,
+  status,
+  onChange,
+  onBlur,
+  onRemove,
+  disabled,
+  error,
+  children,
+}: TemperatureInputFieldProps) {
+  const color = status?.color ?? "#64748B";
+  return (
+    <Card
+      className="temperature-input-card min-w-0 h-full"
+      styles={{ body: { padding: 20 } }}
+    >
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <label htmlFor={id} className="form-label">
+          Suhu {deviceType === "chiller" ? "Chiller" : "Freezer"} {deviceNumber}
+        </label>
+        {onRemove && (
+          <Button
+            size="small"
+            danger
+            onClick={onRemove}
+            disabled={disabled}
+            aria-label={"Hapus input " + deviceType + " " + deviceNumber}
+          >
+            Hapus input
+          </Button>
+        )}
+      </div>
+      <Input
+        id={id}
+        size="large"
+        placeholder="Masukkan suhu"
+        suffix={<span className="text-slate-600">°C</span>}
+        inputMode="decimal"
+        value={value === null ? "" : String(value)}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        disabled={disabled}
+        status={error ? "error" : undefined}
+        maxLength={24}
+        aria-invalid={!!error}
+        aria-describedby={id + "-status" + (error ? " " + id + "-error" : "")}
+        styles={{ root: { minHeight: 44 } }}
+      />
+      <div id={id + "-status"} className="mt-3 mb-4" aria-live="polite">
+        <Tag
+          style={{
+            color,
+            background: status?.background ?? "#F1F5F9",
+            borderColor: color,
+            whiteSpace: "normal",
+          }}
+        >
+          {status?.label ?? "LENGKAPI NILAI SUHU"}
+        </Tag>
+        <Typography.Paragraph className="mt-2 mb-0" style={{ color }}>
+          {status?.description ??
+            "Nilai belum lengkap atau belum valid; belum dinilai sebagai suhu."}
+        </Typography.Paragraph>
+      </div>
+      {error && (
+        <p id={id + "-error"} role="alert" className="field-error mb-3">
+          {error}
+        </p>
+      )}
+      {children}
+    </Card>
+  );
+}

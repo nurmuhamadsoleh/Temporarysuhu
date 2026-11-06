@@ -12,12 +12,15 @@ import type { Kind } from "@/lib/domain";
 export type MeasurementFields = {
   date: string;
   time: string;
-  values: (number | null)[];
+  values: (number | null | string)[];
+  deviceEntries: import("./DynamicTemperatureForm").FormDeviceEntry[];
   notes: string;
   devices: DeviceInput[];
 };
 export function DeviceCorrectionFields({
   index,
+  deviceNumber,
+  incomplete = false,
   value,
   type,
   policy,
@@ -25,6 +28,8 @@ export function DeviceCorrectionFields({
   disabled,
 }: {
   index: number;
+  deviceNumber?: number;
+  incomplete?: boolean;
   value: number | null;
   type: Kind;
   policy: TemperaturePolicy;
@@ -32,11 +37,11 @@ export function DeviceCorrectionFields({
   disabled: boolean;
 }) {
   const status = getTemperatureStatus(type, value, policy),
-    prefix = `${type}-${index + 1}`;
+    prefix = `${type}-${deviceNumber ?? index + 1}`;
   return (
     <div className="device-correction-fields">
       <Form component={false} layout="vertical">
-        {value === null && (
+        {value === null && !incomplete && (
           <Controller
             control={control}
             name={`devices.${index}.missingReason`}
@@ -50,7 +55,7 @@ export function DeviceCorrectionFields({
                 help={fieldState.error?.message}
               >
                 <Select
-                  aria-label={`Pilihan alasan ${type} ${index + 1}`}
+                  aria-label={`Pilihan alasan ${type} ${deviceNumber ?? index + 1}`}
                   placeholder="Pilih alasan atau tulis di bawah"
                   value={undefined}
                   disabled={disabled}

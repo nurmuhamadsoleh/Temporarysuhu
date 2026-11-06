@@ -101,7 +101,7 @@ it("validates filters and rejects injected actor fields in corrective actions", 
     (
       await previewControl(
         new Request(
-          "http://localhost:3000/api/reports/control?kind=freezer&deviceNumber=5&month=11&year=2026",
+          "http://localhost:3000/api/reports/control?kind=freezer&deviceNumber=10001&month=11&year=2026",
         ),
       )
     ).status,

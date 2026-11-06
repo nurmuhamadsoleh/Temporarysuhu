@@ -1,4 +1,5 @@
 "use client";
+import { measurementRefs } from "@/lib/devices";
 import { signatureBlob } from "@/lib/client/canvas";
 import { Tabs } from "antd";
 import dynamic from "next/dynamic";
@@ -284,7 +285,16 @@ function LegacyReports({ actor }: { actor: Actor }) {
                         <small>{r.time} WIB</small>
                       </td>
                       <td className="capitalize">{r.kind}</td>
-                      <td>{r.values.map(temperature).join(" / ")}</td>
+                      <td>
+                        {r.values
+                          .map(
+                            (v, i) =>
+                              measurementRefs(r)[i].number +
+                              ": " +
+                              temperature(v),
+                          )
+                          .join(" / ")}
+                      </td>
                       <td>{r.officer}</td>
                       <td>
                         <Status value={r.status} />

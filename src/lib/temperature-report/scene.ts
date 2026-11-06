@@ -244,7 +244,7 @@ export function buildControlScenes(
       9,
     );
     text(
-      `Suhu Normal: ${report.sop ? `${temperature(report.sop.min)} s/d ${temperature(report.sop.max)}` : "Belum ditetapkan"}`,
+      `Suhu Normal: ${report.sop ? `${temperature(report.sop.min)} s/d ${temperature(report.sop.max)}` : report.normalRangeNote || "Belum ditetapkan"}`,
       M,
       78,
       9,

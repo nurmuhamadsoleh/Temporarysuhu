@@ -1,4 +1,10 @@
 "use client";
+import {
+  measuredDevices,
+  measurementValue,
+  measurementIndex,
+  type TemperatureDeviceConfig,
+} from "@/lib/devices";
 import { useMemo, useState } from "react";
 import {
   Chart as ChartJS,
@@ -34,11 +40,13 @@ const colors = ["#0891b2", "#2563eb", "#7c3aed", "#16a34a", "#f59e0b"];
 export function Trend({
   records,
   kind,
+  devices,
 }: {
   records: Measurement[];
   kind: Kind;
+  devices?: TemperatureDeviceConfig[];
 }) {
-  const [hidden, setHidden] = useState<number[]>([]);
+  const [hidden, setHidden] = useState<string[]>([]);
   const r = useMemo(
     () =>
       records
@@ -46,6 +54,9 @@ export function Trend({
         .slice()
         .reverse(),
     [records, kind],
+  );
+  const sensors = (devices ?? measuredDevices(records, kind)).filter(
+    (d) => d.kind === kind && d.active,
   );
   return (
     <>
@@ -55,17 +66,19 @@ export function Trend({
           aria-label={`Tren suhu ${config[kind].label}; pilih legenda untuk menampilkan atau menyembunyikan sensor`}
           data={{
             labels: r.map((r) => `${displayDate(r.date)} ${r.time}`),
-            datasets: Array.from({ length: config[kind].count }, (_, i) => ({
-              label: `${config[kind].label} ${i + 1}`,
-              hidden: hidden.includes(i),
-              data: r.map((r) => r.values[i]),
-              borderColor: colors[i],
-              backgroundColor: colors[i],
+            datasets: sensors.map((device, i) => ({
+              label: device.label,
+              hidden: hidden.includes(device.id),
+              data: r.map((r) => measurementValue(r, device.number) ?? null),
+              borderColor: colors[i % colors.length],
+              backgroundColor: colors[i % colors.length],
               borderWidth: 2,
               pointRadius: 3,
               spanGaps: false,
               pointBackgroundColor: r.map((row) => {
-                const code = row.deviceStates?.[i]?.temperatureStatus;
+                const code =
+                  row.deviceStates?.[measurementIndex(row, device.number)]
+                    ?.temperatureStatus;
                 return code ? statusPalette[code].color : "#64748B";
               }),
               tension: 0.3,
@@ -88,8 +101,20 @@ export function Trend({
               },
               tooltip: {
                 callbacks: {
-                  label: (c) =>
-                    `${c.dataset.label}: ${temperature(c.raw === null ? null : Number(c.raw))}${r[c.dataIndex]?.deviceStates?.[c.datasetIndex]?.temperatureStatus ? " | " + statusPalette[r[c.dataIndex].deviceStates![c.datasetIndex].temperatureStatus].label : ""}`,
+                  label: (c) => {
+                    const row = r[c.dataIndex],
+                      device = sensors[c.datasetIndex],
+                      code =
+                        row?.deviceStates?.[
+                          measurementIndex(row, device.number)
+                        ]?.temperatureStatus;
+                    return (
+                      c.dataset.label +
+                      ": " +
+                      temperature(c.raw === null ? null : Number(c.raw)) +
+                      (code ? " | " + statusPalette[code].label : "")
+                    );
+                  },
                 },
               },
             },
@@ -112,22 +137,25 @@ export function Trend({
         role="group"
         aria-label={`Tampilkan sensor ${config[kind].label}`}
       >
-        {Array.from({ length: config[kind].count }, (_, i) => (
+        {sensors.map((device, i) => (
           <button
-            key={i}
+            key={device.id}
             type="button"
-            aria-pressed={!hidden.includes(i)}
+            aria-pressed={!hidden.includes(device.id)}
             className="chart-sensor-button"
             onClick={() =>
               setHidden((current) =>
-                current.includes(i)
-                  ? current.filter((index) => index !== i)
-                  : [...current, i],
+                current.includes(device.id)
+                  ? current.filter((index) => index !== device.id)
+                  : [...current, device.id],
               )
             }
           >
-            <span aria-hidden="true" style={{ background: colors[i] }} />
-            {config[kind].label} {i + 1}
+            <span
+              aria-hidden="true"
+              style={{ background: colors[i % colors.length] }}
+            />
+            {device.label}
           </button>
         ))}
       </div>

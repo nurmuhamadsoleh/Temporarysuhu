@@ -1,8 +1,8 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signatureBlob } from "@/lib/client/canvas";
 import { ApiError } from "@/lib/client/api";
-import { Controller, useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch, useFieldArray } from "react-hook-form";
 import type SignatureCanvas from "react-signature-canvas";
 import { ResponsiveDialog } from "@/components/ui/ResponsiveDialog";
 import { SignaturePad } from "@/components/signature/SignaturePad";
@@ -12,7 +12,19 @@ import { ConfigProvider, DatePicker, TimePicker } from "antd";
 import idID from "antd/locale/id_ID";
 import dayjs from "dayjs";
 import "dayjs/locale/id";
-import { TemperatureVerticalSlider } from "./TemperatureVerticalSlider";
+import {
+  DynamicTemperatureForm,
+  type FormDeviceEntry,
+} from "./DynamicTemperatureForm";
+import {
+  defaultDevices,
+  measurementRefs,
+  measurementIndex,
+  measurementValue,
+  MAX_MEASUREMENT_DEVICES,
+} from "@/lib/devices";
+import { parseTemperatureText } from "@/lib/temperature-input";
+import type { RegisteredDevice } from "@/lib/server/sheets";
 import {
   Save,
   RotateCcw,
@@ -24,8 +36,6 @@ import {
 } from "lucide-react";
 import {
   config,
-  normalize,
-  temperatureValueSchema,
   dateSchema,
   timeSchema,
   type Sop,
@@ -44,12 +54,11 @@ import {
   Empty,
   Status,
 } from "@/components/ui";
-import {
-  DeviceCorrectionFields,
-  type MeasurementFields as Fields,
-} from "./DeviceCorrectionFields";
+import { type MeasurementFields as Fields } from "./DeviceCorrectionFields";
 import {
   DEFAULT_TEMPERATURE_POLICY,
+  getRecordedTemperatureStatus,
+  statusPalette,
   emptyDeviceInput,
   validateDeviceInputs,
   type TemperaturePolicy,
@@ -66,12 +75,25 @@ export function MeasurementForm({
   initialMetadata: { date: string; time: string };
 }) {
   const router = useRouter();
+  const registry = useData<RegisteredDevice[]>(
+    "/api/devices?includeInactive=true",
+  );
+  const registrySnapshot = useRef<RegisteredDevice[] | null>(null),
+    registryFingerprint = useRef("");
   const sopData = useData<TemperaturePolicy>("/api/temperatures/policy");
   const policy = sopData.data ?? {
     ...DEFAULT_TEMPERATURE_POLICY,
     freezer: initialSop.freezer
-      ? { ...initialSop.freezer, warningMax: null }
-      : null,
+      ? {
+          ...initialSop.freezer,
+          warningMax:
+            initialSop.freezer.min ===
+              DEFAULT_TEMPERATURE_POLICY.freezer?.min &&
+            initialSop.freezer.max === DEFAULT_TEMPERATURE_POLICY.freezer?.max
+              ? DEFAULT_TEMPERATURE_POLICY.freezer.warningMax
+              : null,
+        }
+      : DEFAULT_TEMPERATURE_POLICY.freezer,
   };
   const cfg = config[kind],
     canvas = useRef<SignatureCanvas>(null),
@@ -99,26 +121,46 @@ export function MeasurementForm({
     handleSubmit,
     reset,
     control,
+    getValues,
+    setValue,
+    trigger,
     formState: { errors },
   } = useForm<Fields>({
     defaultValues: {
       ...initialMetadata,
-      values: Array(cfg.count).fill(null),
+      values: defaultDevices(kind).map(() => null),
+      deviceEntries: defaultDevices(kind).map((d) => ({
+        ...d,
+        persisted: true,
+        version: "initial-v1",
+      })),
       notes: "",
-      devices: Array.from({ length: cfg.count }, emptyDeviceInput),
+      devices: defaultDevices(kind).map(emptyDeviceInput),
     },
   });
+  const { append: appendEntry, replace: replaceEntries } = useFieldArray({
+    control,
+    name: "deviceEntries",
+    keyName: "formKey",
+  });
+  const entries = useWatch({ control, name: "deviceEntries" }) ?? [];
   const { data, error, loading, refresh } = useData<Measurement[]>(
     `/api/temperatures/${kind}?q=${encodeURIComponent(search)}&from=${date}&to=${date}`,
   );
   const values = useWatch({ control, name: "values" });
   const canWrite = actor.role !== "SUPERVISOR";
   const resetForm = () => {
+    const current = (
+      registrySnapshot.current ??
+      registry.data ??
+      defaultDevices(kind).map((d) => ({ ...d, version: "initial-v1" }))
+    ).filter((d) => d.kind === kind && d.active);
     reset({
       ...jakartaNow(),
-      values: Array(cfg.count).fill(null),
+      values: current.map(() => null),
+      deviceEntries: current.map((d) => ({ ...d, persisted: true })),
       notes: "",
-      devices: Array.from({ length: cfg.count }, emptyDeviceInput),
+      devices: current.map(emptyDeviceInput),
     });
     canvas.current?.clear();
     setPreview("");
@@ -127,6 +169,199 @@ export function MeasurementForm({
     signatureRevision.current = 0;
     setSaveError("");
     setSessionExpired(false);
+  };
+  useEffect(() => {
+    if (!registry.data || busy || editing || pending.current) return;
+    const fingerprint = JSON.stringify(
+      registry.data
+        .filter((d) => d.kind === kind)
+        .map((d) => [d.id, d.version, d.active]),
+    );
+    if (registryFingerprint.current === fingerprint) return;
+    const old = getValues(),
+      existing = old.deviceEntries,
+      configured = registry.data.filter((d) => d.kind === kind),
+      active = configured.filter((d) => d.active);
+    const next: FormDeviceEntry[] = active.map((d) => ({
+      ...d,
+      persisted: true,
+    }));
+    for (const d of existing.filter(
+      (d) => d.persisted && !active.some((n) => n.id === d.id),
+    )) {
+      const index = existing.findIndex((n) => n.id === d.id);
+      if (
+        String(old.values[index] ?? "").trim() ||
+        old.devices[index]?.missingReason ||
+        old.devices[index]?.correctiveAction ||
+        old.devices[index]?.performedBy ||
+        (old.devices[index]?.actionStatus &&
+          old.devices[index].actionStatus !== "PENDING")
+      )
+        next.push({ ...d, active: false });
+    }
+    let number = Math.max(0, ...configured.map((d) => d.number));
+    for (const d of existing.filter(
+      (d) => !d.persisted && !next.some((n) => n.id === d.id),
+    ))
+      next.push({ ...d, number: ++number });
+    next.sort((a, b) => a.number - b.number);
+    setValue(
+      "values",
+      next.map((d) => {
+        const i = existing.findIndex((n) => n.id === d.id);
+        return i < 0 ? null : old.values[i];
+      }),
+    );
+    setValue(
+      "devices",
+      next.map((d) => {
+        const i = existing.findIndex((n) => n.id === d.id);
+        return i < 0 ? emptyDeviceInput() : old.devices[i];
+      }),
+    );
+    replaceEntries(next);
+    registrySnapshot.current = registry.data;
+    registryFingerprint.current = fingerprint;
+  }, [registry.data, busy, editing, kind, getValues, setValue, replaceEntries]);
+  const removeInput = (id: string) => {
+    if (busy || editing || pending.current) {
+      toast.error(
+        "Periksa hasil permintaan sebelumnya sebelum mengubah daftar input.",
+      );
+      return;
+    }
+    const fields = getValues(),
+      index = fields.deviceEntries.findIndex((d) => d.id === id);
+    if (
+      index < 0 ||
+      (fields.deviceEntries[index].persisted &&
+        fields.deviceEntries[index].active)
+    )
+      return;
+    setValue(
+      "values",
+      fields.values.filter((_, i) => i !== index),
+    );
+    setValue(
+      "devices",
+      fields.devices.filter((_, i) => i !== index),
+    );
+    const remaining = fields.deviceEntries.filter((d) => d.id !== id);
+    let number = Math.max(
+      0,
+      ...remaining.filter((d) => d.persisted).map((d) => d.number),
+      ...(registry.data ?? [])
+        .filter((d) => d.kind === kind)
+        .map((d) => d.number),
+    );
+    replaceEntries(
+      remaining.map((d) => (d.persisted ? d : { ...d, number: ++number })),
+    );
+  };
+  const addInput = () => {
+    if (actor.role !== "SUPER_ADMIN" || editing || pending.current) return;
+    const fields = getValues();
+    if (fields.deviceEntries.length >= MAX_MEASUREMENT_DEVICES) {
+      toast.error("Batas jumlah input tercapai.");
+      return;
+    }
+    const number =
+      Math.max(
+        0,
+        ...fields.deviceEntries.map((d) => d.number),
+        ...(registry.data ?? [])
+          .filter((d) => d.kind === kind)
+          .map((d) => d.number),
+      ) + 1;
+    setValue("values", [...fields.values, null]);
+    setValue("devices", [...fields.devices, emptyDeviceInput()]);
+    appendEntry({
+      id: crypto.randomUUID(),
+      number,
+      persisted: false,
+      active: true,
+      version: "draft",
+    });
+  };
+  const persistEntry = async (
+    entry: FormDeviceEntry,
+  ): Promise<FormDeviceEntry> => {
+    if (entry.persisted) return entry;
+    if (actor.role !== "SUPER_ADMIN")
+      throw new Error("Hanya Super Admin dapat mendaftarkan perangkat.");
+    const saved = await api<RegisteredDevice>("/api/devices", {
+      method: "POST",
+      headers: { "Idempotency-Key": entry.id },
+      body: JSON.stringify({ kind, expectedNumber: entry.number }),
+    });
+    const next = { ...saved, persisted: true };
+    replaceEntries(
+      getValues("deviceEntries").map((d) => (d.id === entry.id ? next : d)),
+    );
+    registrySnapshot.current = [
+      ...(registrySnapshot.current ?? registry.data ?? []).filter(
+        (d) => d.id !== saved.id,
+      ),
+      saved,
+    ];
+    if (saved.number !== entry.number)
+      throw new Error(
+        "Perangkat terdaftar sebagai " +
+          saved.label +
+          ". Periksa label sebelum menyimpan pengukuran kembali.",
+      );
+    return next;
+  };
+  const registerInput = async (id: string) => {
+    if (busy || pending.current) return;
+    const entry = getValues("deviceEntries").find((d) => d.id === id);
+    if (!entry) return;
+    setBusy(true);
+    try {
+      await persistEntry(entry);
+      toast.success("Perangkat terdaftar dan tetap tersedia setelah refresh.");
+      await registry.refresh();
+    } catch (error) {
+      await registry.refresh();
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const deactivateInput = async (id: string) => {
+    if (busy || pending.current) return;
+    const entry = getValues("deviceEntries").find((d) => d.id === id);
+    if (!entry) return;
+    setBusy(true);
+    try {
+      await api("/api/devices/" + id, {
+        method: "PATCH",
+        body: JSON.stringify({ active: false, version: entry.version }),
+      });
+      await registry.refresh();
+      toast.success("Perangkat dinonaktifkan; histori tetap tersedia.");
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const activateInput = async (device: RegisteredDevice) => {
+    if (busy || pending.current) return;
+    setBusy(true);
+    try {
+      await api("/api/devices/" + device.id, {
+        method: "PATCH",
+        body: JSON.stringify({ active: true, version: device.version }),
+      });
+      await registry.refresh();
+      toast.success("Perangkat diaktifkan kembali.");
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
   };
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -139,18 +374,16 @@ export function MeasurementForm({
         setSessionExpired(false);
         try {
           let signatureId = editing?.signatureId;
-          const numeric = fields.values.map((v) =>
-            v === null ? null : normalize(v),
-          );
-          if (
-            numeric.some(
-              (v) =>
-                v !== null &&
-                !temperatureValueSchema(kind).safeParse(v).success,
-            )
-          )
+          let numeric = fields.values.map((v) => {
+            const parsed = parseTemperatureText(String(v ?? ""), kind);
+            if (!parsed.valid) throw new Error(parsed.message);
+            return parsed.value;
+          });
+          if (!registry.data)
+            throw new Error("Daftar perangkat belum berhasil dimuat.");
+          if (fields.deviceEntries.some((d) => !d.active) && !editing)
             throw new Error(
-              "Konfirmasikan seluruh suhu dengan presisi 0,1°C dalam rentang yang diizinkan",
+              "Keluarkan input perangkat nonaktif sebelum membuat pengukuran baru.",
             );
           if (!sopData.data)
             throw new Error("Kebijakan suhu belum berhasil dimuat. Coba lagi.");
@@ -166,10 +399,33 @@ export function MeasurementForm({
                 .map((e) => `${cfg.label} ${e.deviceNumber}: ${e.message}`)
                 .join("; "),
             );
+          if (!editing && (!canvas.current || canvas.current.isEmpty()))
+            throw new Error("Tanda tangan petugas wajib diisi");
+          const registered: FormDeviceEntry[] = [];
+          for (const entry of fields.deviceEntries)
+            registered.push(await persistEntry(entry));
+          const ordered = registered
+            .map((ref, i) => ({
+              ref,
+              value: numeric[i],
+              correction: fields.devices[i],
+            }))
+            .sort((a, b) => a.ref.number - b.ref.number);
+          numeric = ordered.map((d) => d.value);
+          const requestData = {
+            date: fields.date,
+            time: fields.time,
+            values: numeric,
+            devices: ordered.map((d) => d.correction),
+            deviceRefs: ordered.map((d) => ({
+              id: d.ref.id,
+              number: d.ref.number,
+            })),
+            policyVersion: policy.version,
+            notes: fields.notes,
+          };
           if (!editing) {
-            if (!canvas.current || canvas.current.isEmpty())
-              throw new Error("Tanda tangan petugas wajib diisi");
-            const content = JSON.stringify(fields);
+            const content = JSON.stringify(requestData);
             if (
               pending.current &&
               (pending.current.content !== content ||
@@ -191,7 +447,7 @@ export function MeasurementForm({
               // Retain the exact encoded image across retries and canvas resize.
               const blob =
                 pending.current.blob ??
-                (await signatureBlob(canvas.current.getCanvas()));
+                (await signatureBlob(canvas.current!.getCanvas()));
               pending.current.blob = blob;
               const signature = await api<{ id: string }>("/api/signatures", {
                 method: "POST",
@@ -214,12 +470,7 @@ export function MeasurementForm({
                 ? {}
                 : { "Idempotency-Key": pending.current!.key },
               body: JSON.stringify({
-                date: fields.date,
-                time: fields.time,
-                values: numeric,
-                devices: fields.devices,
-                policyVersion: policy.version,
-                notes: fields.notes,
+                ...requestData,
                 signatureId,
                 ...(editing ? { version: editing.updatedAt } : {}),
               }),
@@ -228,6 +479,8 @@ export function MeasurementForm({
           if (
             !saved?.id ||
             saved.kind !== kind ||
+            JSON.stringify(saved.deviceRefs) !==
+              JSON.stringify(requestData.deviceRefs) ||
             JSON.stringify(saved.values) !== JSON.stringify(numeric)
           )
             throw new ApiError(
@@ -241,6 +494,8 @@ export function MeasurementForm({
           window.dispatchEvent(new Event("tempcontrol:measurements-updated"));
           router.refresh();
         } catch (e) {
+          if (e instanceof ApiError && e.status === 409)
+            await registry.refresh();
           const message =
             (e as Error).message +
             (e instanceof ApiError && e.requestId
@@ -265,18 +520,34 @@ export function MeasurementForm({
     reset({
       date: r.date,
       time: r.time,
-      values: r.values.map((v) => (v === null ? null : normalize(v))),
+      values: r.values.map((v) =>
+        v === null ? null : String(v).replace(".", ","),
+      ),
+      deviceEntries: measurementRefs(r).map((d) => ({
+        ...d,
+        persisted: true,
+        active: registry.data?.find((n) => n.id === d.id)?.active ?? false,
+        version: registry.data?.find((n) => n.id === d.id)?.version ?? "legacy",
+      })),
       devices:
         r.deviceStates?.map((d) => ({
           missingReason: d.missingReason,
           correctiveAction: d.correctiveAction,
           performedBy: d.performedBy,
           actionStatus: d.actionStatus,
-        })) ?? Array.from({ length: cfg.count }, emptyDeviceInput),
+        })) ?? r.values.map(emptyDeviceInput),
       notes: r.notes,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const historyNumbers = [
+    ...new Set([
+      ...(registry.data ?? [])
+        .filter((d) => d.kind === kind)
+        .map((d) => d.number),
+      ...(data ?? []).flatMap((r) => measurementRefs(r).map((d) => d.number)),
+    ]),
+  ].sort((a, b) => a - b);
   const total = data?.length || 0,
     visible = data?.slice((page - 1) * 10, page * 10) || [];
   return (
@@ -302,8 +573,8 @@ export function MeasurementForm({
           <span className="eyebrow">PENCATATAN SUHU</span>
           <h1>Monitoring suhu {cfg.label.toLowerCase()}</h1>
           <p>
-            Catat pengukuran {cfg.count} unit {cfg.label.toLowerCase()} dengan
-            dokumentasi yang lengkap.
+            Catat pengukuran {entries.length} unit {cfg.label.toLowerCase()}{" "}
+            dengan dokumentasi yang lengkap.
           </p>
         </div>
         <a className="btn secondary" href="#history">
@@ -317,12 +588,12 @@ export function MeasurementForm({
             <div>
               <h2>{editing ? "Edit pengukuran" : "Pengukuran baru"}</h2>
               <p>
-                Geser slider untuk mengonfirmasi suhu. Data disimpan hanya saat
-                Simpan Data ditekan.
+                Isi suhu dengan koma atau titik. Data disimpan hanya saat Simpan
+                Data ditekan.
               </p>
             </div>
             <span className={`tag ${kind === "chiller" ? "cyan" : "indigo"}`}>
-              {cfg.count} unit {cfg.label}
+              {entries.length} unit {cfg.label}
             </span>
           </div>
           {saveError && (
@@ -444,8 +715,13 @@ export function MeasurementForm({
             <div className="temperature-section-heading">
               <h3>Pembacaan suhu</h3>
               <span>
-                {values.filter((v) => v !== null).length}/{cfg.count}{" "}
-                terkonfirmasi
+                {
+                  values.filter((v) => {
+                    const parsed = parseTemperatureText(String(v ?? ""), kind);
+                    return parsed.valid && parsed.value !== null;
+                  }).length
+                }
+                /{entries.length} terkonfirmasi
               </span>
             </div>
             {sopData.error && (
@@ -461,44 +737,47 @@ export function MeasurementForm({
                 </button>
               </div>
             )}
-            <div
-              className={`grid temperature-vertical-grid ${kind === "freezer" ? "temperature-grid-freezer" : "temperature-grid-chiller"}`}
-            >
-              {Array.from({ length: cfg.count }, (_, i) => (
-                <Controller
-                  key={i}
-                  name={`values.${i}`}
-                  control={control}
-                  rules={{
-                    validate: (v) =>
-                      v === null ||
-                      temperatureValueSchema(kind).safeParse(v).success ||
-                      "Geser atau konfirmasikan suhu",
-                  }}
-                  render={({ field, fieldState }) => (
-                    <TemperatureVerticalSlider
-                      type={kind}
-                      label={`Suhu ${cfg.label} ${i + 1}`}
-                      value={field.value}
-                      onChange={field.onChange}
-                      disabled={busy}
-                      error={fieldState.error?.message}
-                      policy={policy}
-                      sop={policy[kind]}
-                    >
-                      <DeviceCorrectionFields
-                        index={i}
-                        value={field.value}
-                        type={kind}
-                        policy={policy}
-                        control={control}
-                        disabled={busy}
-                      />
-                    </TemperatureVerticalSlider>
-                  )}
-                />
-              ))}
-            </div>
+            {registry.error && (
+              <ErrorBox message={registry.error} retry={registry.refresh} />
+            )}
+            <DynamicTemperatureForm
+              kind={kind}
+              entries={entries}
+              control={control}
+              trigger={trigger}
+              policy={policy}
+              disabled={busy || !registry.data}
+              canManage={actor.role === "SUPER_ADMIN"}
+              editing={!!editing}
+              onAdd={addInput}
+              onRemove={removeInput}
+              onRegister={(id) => void registerInput(id)}
+              onDeactivate={(id) => void deactivateInput(id)}
+            />
+            {actor.role === "SUPER_ADMIN" &&
+              !editing &&
+              (registry.data ?? []).some(
+                (d) => d.kind === kind && !d.active,
+              ) && (
+                <details className="mt-4">
+                  <summary>Perangkat nonaktif · histori tetap tersedia</summary>
+                  <div className="flex flex-wrap gap-3 mt-3">
+                    {(registry.data ?? [])
+                      .filter((d) => d.kind === kind && !d.active)
+                      .map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          disabled={busy}
+                          className="btn secondary"
+                          onClick={() => void activateInput(d)}
+                        >
+                          Aktifkan {d.label}
+                        </button>
+                      ))}
+                  </div>
+                </details>
+              )}
             <div className="section-divider" />
             <div className="grid gap-6 lg:grid-cols-2">
               <label>
@@ -594,7 +873,9 @@ export function MeasurementForm({
                 </button>
                 <button
                   className="btn primary"
-                  disabled={busy || !sopData.data}
+                  disabled={
+                    busy || !sopData.data || !registry.data || !entries.length
+                  }
                 >
                   <Save size={17} />
                   {busy
@@ -666,9 +947,9 @@ export function MeasurementForm({
                 <thead>
                   <tr>
                     <th>Tanggal / Jam</th>
-                    {Array.from({ length: cfg.count }, (_, i) => (
-                      <th key={i}>
-                        {cfg.label} {i + 1}
+                    {historyNumbers.map((number) => (
+                      <th key={number}>
+                        {cfg.label} {number}
                       </th>
                     ))}
                     <th>Petugas</th>
@@ -684,18 +965,45 @@ export function MeasurementForm({
                         <strong>{displayDate(r.date)}</strong>
                         <small>{r.time} WIB</small>
                       </td>
-                      {r.values.map((v, i) => (
-                        <td key={i}>
-                          <span>{temperature(v)}</span>
-                          {r.deviceStates?.[i] && (
-                            <div className="mt-1">
-                              <Status
-                                value={r.deviceStates[i].temperatureStatus}
-                              />
-                            </div>
-                          )}
-                        </td>
-                      ))}
+                      {historyNumbers.map((number) => {
+                        const i = measurementIndex(r, number),
+                          v = measurementValue(r, number);
+                        return (
+                          <td key={number}>
+                            {i < 0 ? (
+                              <span title="Perangkat tidak termasuk pencatatan ini">
+                                —
+                              </span>
+                            ) : (
+                              <>
+                                <span
+                                  style={
+                                    kind === "freezer"
+                                      ? {
+                                          color:
+                                            statusPalette[
+                                              getRecordedTemperatureStatus(r, i)
+                                            ].color,
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  {temperature(v ?? null)}
+                                </span>
+                                {r.deviceStates?.[i] && (
+                                  <div className="mt-1">
+                                    <Status
+                                      value={
+                                        r.deviceStates[i].temperatureStatus
+                                      }
+                                    />
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </td>
+                        );
+                      })}
                       <td>{r.officer}</td>
                       <td>
                         <button
@@ -795,8 +1103,8 @@ export function MeasurementForm({
           </p>
           <div className="flex gap-3 flex-wrap my-4">
             {detail.values.map((v, i) => (
-              <span className="tag" key={i}>
-                {i + 1}: {temperature(v)}
+              <span className="tag" key={measurementRefs(detail)[i].id}>
+                {measurementRefs(detail)[i].number}: {temperature(v)}
               </span>
             ))}
           </div>

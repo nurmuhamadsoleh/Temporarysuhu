@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import "server-only";
 import { createHash } from "node:crypto";
 import { google, sheets_v4 } from "googleapis";
@@ -14,12 +15,25 @@ import {
   DEFAULT_TEMPERATURE_POLICY,
   policyBoundsSchema,
   getTemperatureStatus,
+  countRecordedStatuses,
+  deviceInputSchema,
+  type DeviceState,
   validateDeviceInputs,
   emptyDeviceInput,
   aggregateTemperatureStatus,
   type TemperaturePolicy,
 } from "@/lib/temperature-policy";
 import { AppError } from "./errors";
+import { z } from "@/lib/validation";
+import {
+  defaultDevices,
+  LEGACY_DEVICE_COUNTS,
+  measurementRefs,
+  measurementValue,
+  MAX_DEVICE_NUMBER,
+  MAX_MEASUREMENT_DEVICES,
+  type TemperatureDeviceConfig,
+} from "@/lib/devices";
 import { USER_HEADERS } from "@/lib/users";
 import { safeLog } from "./safe-log";
 import { googleFetch } from "./google-transport";
@@ -39,7 +53,10 @@ export const headers: Record<string, string[]> = {
     "RECORD ID",
     "TANGGAL",
     "JAM",
-    ...Array.from({ length: 5 }, (_, i) => `SUHU CHILLER ${i + 1}`),
+    ...Array.from(
+      { length: LEGACY_DEVICE_COUNTS.chiller },
+      (_, i) => `SUHU CHILLER ${i + 1}`,
+    ),
     "NAMA PETUGAS",
     "TANDA TANGAN",
     "STATUS",
@@ -53,7 +70,10 @@ export const headers: Record<string, string[]> = {
     "RECORD ID",
     "TANGGAL",
     "JAM",
-    ...Array.from({ length: 4 }, (_, i) => `SUHU FREEZER ${i + 1}`),
+    ...Array.from(
+      { length: LEGACY_DEVICE_COUNTS.freezer },
+      (_, i) => `SUHU FREEZER ${i + 1}`,
+    ),
     "NAMA PETUGAS",
     "TANDA TANGAN",
     "STATUS",
@@ -124,6 +144,33 @@ export const headers: Record<string, string[]> = {
     "DEVICE STATES",
     "POLICY VERSION",
     "POLICY SNAPSHOT",
+    "UPDATED AT",
+  ],
+  TEMPERATURE_DEVICES: [
+    "DEVICE ID",
+    "DEVICE TYPE",
+    "DEVICE NUMBER",
+    "LABEL",
+    "ACTIVE",
+    "CREATED AT",
+    "UPDATED AT",
+    "CREATED BY",
+    "UPDATED BY",
+  ],
+  TEMPERATURE_READINGS: [
+    "READING ID",
+    "RECORD ID",
+    "DEVICE TYPE",
+    "DEVICE ID",
+    "DEVICE NUMBER",
+    "TEMPERATURE",
+    "TEMPERATURE STATUS",
+    "MISSING REASON",
+    "CORRECTIVE ACTION",
+    "PERFORMED BY",
+    "ACTION STATUS",
+    "ACTION ID",
+    "POLICY VERSION",
     "UPDATED AT",
   ],
   REPORTS: [
@@ -347,16 +394,31 @@ export async function getTemperaturePolicy(): Promise<TemperaturePolicy> {
     const p = JSON.parse(String(configured[1]));
     if (typeof p.version !== "string" || !p.version)
       throw new AppError(409, "Versi SOP tersimpan tidak valid");
-    return {
+    const current = {
       ...policyBoundsSchema.parse(p.bounds),
       version: String(p.version),
     };
+    // A pre-update null means no Freezer SOP was established. New explicit admin opt-outs remain valid.
+    if (current.freezer === null && p.freezerPolicyExplicit !== true)
+      return {
+        ...current,
+        freezer: DEFAULT_TEMPERATURE_POLICY.freezer,
+        version:
+          "freezer-brt-v1-" +
+          createHash("sha256")
+            .update(JSON.stringify(current))
+            .digest("hex")
+            .slice(0, 16),
+      };
+    return current;
   }
   const legacy = data.find((r) => r[0] === "SOP"),
     sop = legacy ? JSON.parse(String(legacy[1])) : null;
   const bounds = policyBoundsSchema.parse({
     chiller: DEFAULT_TEMPERATURE_POLICY.chiller,
-    freezer: sop?.freezer ? { ...sop.freezer, warningMax: null } : null,
+    freezer: sop?.freezer
+      ? { ...sop.freezer, warningMax: null }
+      : DEFAULT_TEMPERATURE_POLICY.freezer,
   });
   return {
     ...bounds,
@@ -392,6 +454,8 @@ export async function saveTemperaturePolicy(
     index = data.findIndex((r) => r[0] === "TEMPERATURE_POLICY");
   const policy = {
     bounds: next,
+    defaultsVersion: DEFAULT_TEMPERATURE_POLICY.version,
+    freezerPolicyExplicit: true,
     version: crypto.randomUUID(),
     updatedAt: new Date().toISOString(),
     updatedBy: actor.id,
@@ -416,7 +480,7 @@ export function decode(
   kind: Kind,
   r: (string | number | boolean)[],
 ): Measurement {
-  const n = config[kind].count;
+  const n = LEGACY_DEVICE_COUNTS[kind];
   const values = r.slice(3, 3 + n).map((v) => {
     if (v === "" || v === null || v === undefined) return null;
     if (typeof v !== "number" || !Number.isFinite(v))
@@ -451,32 +515,130 @@ export async function getFreezerRecords() {
 }
 export async function getRecords(kind: Kind) {
   const [data, ids] = await Promise.all([rows(config[kind].sheet), sheetIds()]);
-  const metadata =
+  const [metadata, readings] = await Promise.all([
     ids.TEMPERATURE_DEVICE_STATES === undefined
       ? []
-      : await rows("TEMPERATURE_DEVICE_STATES");
+      : rows("TEMPERATURE_DEVICE_STATES"),
+    ids.TEMPERATURE_READINGS === undefined ? [] : rows("TEMPERATURE_READINGS"),
+  ]);
   return data
     .slice(1)
-    .filter((r) => r[0])
+    .filter((row) => row[0])
     .map((row) => {
       const r = decode(kind, row),
-        meta = metadata.find((m) => m[0] === r.id && m[1] === kind);
+        meta = metadata.find((m) => m[0] === r.id && m[1] === kind),
+        parts = readings.filter((p) => p[1] === r.id && p[2] === kind);
+      if (parts.length && !meta)
+        throw new AppError(
+          409,
+          "Manifest pembacaan perangkat hilang. Data dipertahankan untuk pemeriksaan integritas.",
+        );
       if (meta) {
         if (String(meta[5]) !== r.updatedAt)
           throw new AppError(
             503,
             "Pengukuran sedang berubah. Muat ulang data.",
           );
-        r.deviceStates = JSON.parse(String(meta[2]));
+        const state = JSON.parse(String(meta[2]));
+        if (parts.length && state?.format !== "normalized-v1")
+          throw new AppError(
+            409,
+            "Format manifest tidak sesuai pembacaan perangkat tersimpan.",
+          );
+        const legacyValues = [...r.values];
         r.policyVersion = String(meta[3]);
         r.policy = JSON.parse(String(meta[4]));
+        if (state?.format === "normalized-v1") {
+          const refs = z
+            .array(
+              z.object({
+                id: z.string().min(1).max(100),
+                number: z.number().int().min(1).max(MAX_DEVICE_NUMBER),
+              }),
+            )
+            .min(1)
+            .max(MAX_MEASUREMENT_DEVICES)
+            .parse(state.devices);
+          if (
+            new Set(refs.map((d) => d.id)).size !== refs.length ||
+            new Set(refs.map((d) => d.number)).size !== refs.length
+          )
+            throw new AppError(409, "Identitas pembacaan tersimpan duplikat");
+          if (
+            parts.length !== refs.length ||
+            new Set(parts.map((p) => p[3])).size !== refs.length ||
+            new Set(parts.map((p) => p[4])).size !== refs.length
+          )
+            throw new AppError(
+              503,
+              "Pembacaan perangkat belum lengkap atau duplikat. Coba kembali dengan kunci yang sama.",
+            );
+          r.deviceRefs = refs;
+          r.values = [];
+          r.deviceStates = [];
+          for (const ref of refs) {
+            const p = parts.find(
+              (p) => p[3] === ref.id && Number(p[4]) === ref.number,
+            );
+            if (
+              !p ||
+              String(p[13]) !== r.updatedAt ||
+              String(p[12]) !== r.policyVersion
+            )
+              throw new AppError(
+                503,
+                "Versi pembacaan perangkat belum konsisten.",
+              );
+            const value = p[5] === "" ? null : p[5];
+            if (
+              value !== null &&
+              (typeof value !== "number" ||
+                !Number.isFinite(value) ||
+                Math.abs(value * 10 - Math.round(value * 10)) > 1e-7 ||
+                value < config[kind].min ||
+                value > config[kind].max)
+            )
+              throw new AppError(
+                409,
+                "Sel suhu perangkat bukan NUMBER dengan presisi yang sesuai.",
+              );
+            r.values.push(value === null ? null : normalize(value as number));
+            const d = deviceInputSchema.parse({
+              missingReason: String(p[7] || ""),
+              correctiveAction: String(p[8] || ""),
+              performedBy: String(p[9] || ""),
+              actionStatus: String(p[10]),
+            });
+            r.deviceStates.push({
+              ...d,
+              deviceId: ref.id,
+              deviceNumber: ref.number,
+              temperatureStatus: String(
+                p[6],
+              ) as DeviceState["temperatureStatus"],
+              ...(p[11] ? { actionId: String(p[11]) } : {}),
+            });
+          }
+          if (
+            legacyValues.some(
+              (value, index) =>
+                value !== (measurementValue(r, index + 1) ?? null),
+            )
+          )
+            throw new AppError(
+              409,
+              "Kolom suhu legacy tidak cocok dengan pembacaan perangkat tersimpan.",
+            );
+        } else r.deviceStates = state;
         if (
           !Array.isArray(r.deviceStates) ||
-          r.deviceStates.length !== config[kind].count ||
+          r.deviceStates.length !== r.values.length ||
+          (!r.deviceRefs && r.values.length !== LEGACY_DEVICE_COUNTS[kind]) ||
           r.policy?.version !== r.policyVersion ||
           r.deviceStates.some(
             (d, i) =>
-              d.deviceNumber !== i + 1 ||
+              d.deviceNumber !== (r.deviceRefs?.[i]?.number ?? i + 1) ||
+              (r.deviceRefs && d.deviceId !== r.deviceRefs[i].id) ||
               d.temperatureStatus !==
                 getTemperatureStatus(kind, r.values[i], r.policy!).code,
           )
@@ -515,16 +677,30 @@ function prepareDeviceState(
     throw new AppError(
       400,
       errors
-        .map((e) => kind + " " + e.deviceNumber + ": " + e.message)
+        .map(
+          (e) =>
+            kind +
+            " " +
+            (input.deviceRefs?.[e.deviceNumber - 1]?.number ?? e.deviceNumber) +
+            ": " +
+            e.message,
+        )
         .join("; "),
     );
   return devices.map((d, i) => ({
     ...d,
     missingReason: input.values[i] === null ? d.missingReason : "",
-    deviceNumber: i + 1,
+    deviceNumber: input.deviceRefs?.[i]?.number ?? i + 1,
+    ...(input.deviceRefs ? { deviceId: input.deviceRefs[i].id } : {}),
     temperatureStatus: getTemperatureStatus(kind, input.values[i], policy).code,
     ...(d.correctiveAction
-      ? { actionId: before?.deviceStates?.[i]?.actionId || crypto.randomUUID() }
+      ? {
+          actionId:
+            before?.deviceStates?.find(
+              (d) =>
+                d.deviceNumber === (input.deviceRefs?.[i]?.number ?? i + 1),
+            )?.actionId || crypto.randomUUID(),
+        }
       : {}),
   }));
 }
@@ -540,7 +716,11 @@ async function deviceWriteRequests(
   const row = [
     record.id,
     record.kind,
-    JSON.stringify(record.deviceStates),
+    JSON.stringify(
+      record.deviceRefs
+        ? { format: "normalized-v1", devices: record.deviceRefs }
+        : record.deviceStates,
+    ),
     record.policyVersion,
     JSON.stringify(record.policy),
     record.updatedAt,
@@ -550,11 +730,64 @@ async function deviceWriteRequests(
       ? append(ids.TEMPERATURE_DEVICE_STATES, row)
       : replace(ids.TEMPERATURE_DEVICE_STATES, index, row),
   ];
+  if (record.deviceRefs) {
+    const existing = await rows("TEMPERATURE_READINGS"),
+      registry = await rows("TEMPERATURE_DEVICES");
+    for (const device of [
+      ...defaultDevices("chiller"),
+      ...defaultDevices("freezer"),
+    ])
+      if (!registry.some((row) => row[0] === device.id))
+        requests.push(
+          append(ids.TEMPERATURE_DEVICES, [
+            device.id,
+            device.kind,
+            device.number,
+            device.label,
+            true,
+            record.updatedAt,
+            record.updatedAt,
+            actor.id,
+            actor.id,
+          ]),
+        );
+    for (let i = 0; i < record.deviceRefs.length; i++) {
+      const ref = record.deviceRefs[i],
+        d = record.deviceStates![i],
+        at = existing.findIndex(
+          (p) => p[1] === record.id && p[2] === record.kind && p[3] === ref.id,
+        );
+      const reading = [
+        at < 1 ? crypto.randomUUID() : existing[at][0],
+        record.id,
+        record.kind,
+        ref.id,
+        ref.number,
+        record.values[i],
+        d.temperatureStatus,
+        d.missingReason,
+        d.correctiveAction,
+        d.performedBy,
+        d.actionStatus,
+        d.actionId || "",
+        record.policyVersion,
+        record.updatedAt,
+      ];
+      requests.push(
+        at < 1
+          ? append(ids.TEMPERATURE_READINGS, reading)
+          : replace(ids.TEMPERATURE_READINGS, at, reading),
+      );
+    }
+  }
   for (const d of record.deviceStates ?? []) {
-    const previous = before?.deviceStates?.[d.deviceNumber - 1];
+    const previous = before?.deviceStates?.find(
+      (p) => p.deviceNumber === d.deviceNumber,
+    );
     if (
       !d.correctiveAction ||
       (previous &&
+        before &&
         previous.correctiveAction === d.correctiveAction &&
         previous.performedBy === d.performedBy &&
         previous.actionStatus === d.actionStatus &&
@@ -562,8 +795,8 @@ async function deviceWriteRequests(
         before.date === record.date &&
         before.time === record.time &&
         before.policyVersion === record.policyVersion &&
-        before?.values[d.deviceNumber - 1] ===
-          record.values[d.deviceNumber - 1])
+        (before ? measurementValue(before, d.deviceNumber) : undefined) ===
+          measurementValue(record, d.deviceNumber))
     )
       continue;
     const actionId = d.actionId!,
@@ -585,7 +818,7 @@ async function deviceWriteRequests(
         record.updatedAt,
         d.performedBy,
         "",
-        record.values[d.deviceNumber - 1],
+        measurementValue(record, d.deviceNumber),
         d.temperatureStatus,
         d.actionStatus,
         oldAction?.[18] || actor.id,
@@ -618,7 +851,10 @@ export function encode(r: Measurement) {
     r.id,
     r.date,
     r.time,
-    ...r.values,
+    ...Array.from(
+      { length: LEGACY_DEVICE_COUNTS[r.kind] },
+      (_, i) => measurementValue(r, i + 1) ?? null,
+    ),
     r.officer,
     r.signatureId,
     r.status,
@@ -665,6 +901,7 @@ export async function createTemperatureRecord(
     if (!r) throw new AppError(409, "Request sebelumnya sudah diproses");
     return r;
   }
+  await validateMeasurementDevices(kind, input);
   const signatures = await rows("SIGNATURE_METADATA");
   const signature = signatures.find(
     (r) => r[0] === input.signatureId && r[1] === actor.id && !r[2],
@@ -705,8 +942,8 @@ export async function createTemperatureRecord(
   if (
     !readBack ||
     readBack.values.some((v, i) => v !== record.values[i]) ||
-    JSON.stringify(readBack.deviceStates) !==
-      JSON.stringify(record.deviceStates)
+    !isDeepStrictEqual(readBack.deviceRefs, record.deviceRefs) ||
+    !isDeepStrictEqual(readBack.deviceStates, record.deviceStates)
   )
     throw new AppError(
       503,
@@ -741,6 +978,7 @@ export async function updateTemperatureRecord(
     throw new AppError(409, "Data sudah berubah. Muat ulang sebelum mengedit.");
   if (input.signatureId !== old.signatureId)
     throw new AppError(400, "Referensi tanda tangan tidak boleh diganti");
+  await validateMeasurementDevices(kind, input, old);
   const policy = await getTemperaturePolicy(),
     deviceStates = prepareDeviceState(input, kind, policy, old);
   const next = {
@@ -768,7 +1006,8 @@ export async function updateTemperatureRecord(
     !confirmed ||
     confirmed.updatedAt !== next.updatedAt ||
     JSON.stringify(confirmed.values) !== JSON.stringify(next.values) ||
-    JSON.stringify(confirmed.deviceStates) !== JSON.stringify(next.deviceStates)
+    !isDeepStrictEqual(confirmed.deviceStates, next.deviceStates) ||
+    !isDeepStrictEqual(confirmed.deviceRefs, next.deviceRefs)
   )
     throw new FeatureUnavailable(
       "TEMPERATURE_PERSISTENCE_UNCONFIRMED",
@@ -787,6 +1026,8 @@ export async function deleteTemperatureRecord(
   const data = await rows(config[kind].sheet);
   const index = data.findIndex((r) => r[0] === id);
   if (index < 1) throw new AppError(404, "Record tidak ditemukan");
+  const before = (await getRecords(kind)).find((r) => r.id === id);
+  if (!before) throw new AppError(404, "Record tidak ditemukan");
   if (await isLocked(id))
     throw new AppError(409, "Data terkunci oleh laporan yang disetujui");
   await batch([
@@ -795,7 +1036,7 @@ export async function deleteTemperatureRecord(
       index,
       Array(headers[config[kind].sheet].length).fill(""),
     ),
-    audit(ids, actor, "DELETE", id, decode(kind, data[index]), null),
+    audit(ids, actor, "DELETE", id, before, null),
   ]);
 }
 export function getTemperatureStatistics(records: Measurement[], sop: Sop) {
@@ -809,22 +1050,275 @@ export function getTemperatureStatistics(records: Measurement[], sop: Sop) {
       ? values.reduce((a, b) => a + b, 0) / values.length
       : null;
   };
+  const freezerStatusCounts = countRecordedStatuses(freezer);
   return {
+    freezerStatusCounts,
     chillerCount: chiller.length,
     freezerCount: freezer.length,
     chillerAverage: avg(chiller),
     freezerAverage: avg(freezer),
-    alerts: records.reduce((n, r) => {
-      const bound = sop[r.kind];
-      return (
-        n +
-        (bound
-          ? r.values.filter(
-              (v) => v !== null && (v < bound.min || v > bound.max),
-            ).length
-          : 0)
-      );
-    }, 0),
+    alerts:
+      freezerStatusCounts.WARNING +
+      freezerStatusCounts.HIGH_TEMPERATURE +
+      freezerStatusCounts.LOW_TEMPERATURE +
+      chiller.reduce((n, r) => {
+        const bound = sop[r.kind];
+        return (
+          n +
+          (bound
+            ? r.values.filter(
+                (v) => v !== null && (v < bound.min || v > bound.max),
+              ).length
+            : 0)
+        );
+      }, 0),
   };
 }
 export const getMonitoringReport = allRecords;
+
+export type RegisteredDevice = TemperatureDeviceConfig & { version: string };
+/** Read-only defaults until an authorized mutation persists the initial configuration. */
+export async function getTemperatureDevices(
+  includeInactive = false,
+): Promise<RegisteredDevice[]> {
+  const ids = await sheetIds(),
+    data =
+      ids.TEMPERATURE_DEVICES === undefined
+        ? []
+        : await rows("TEMPERATURE_DEVICES");
+  const stored = data
+    .slice(1)
+    .filter((r) => r[0])
+    .map((r) => {
+      const kind = z.enum(["chiller", "freezer"]).parse(r[1]),
+        number = z.number().int().min(1).max(MAX_DEVICE_NUMBER).parse(r[2]);
+      if (
+        !/^[a-zA-Z0-9-]{1,100}$/.test(String(r[0])) ||
+        !["true", "false"].includes(String(r[4]))
+      )
+        throw new AppError(409, "Konfigurasi perangkat tidak valid");
+      return {
+        id: String(r[0]),
+        kind,
+        number,
+        label: String(r[3]),
+        active: r[4] === true || r[4] === "true",
+        version: String(r[6]),
+      };
+    });
+  if (
+    new Set(stored.map((d) => d.id)).size !== stored.length ||
+    new Set(stored.map((d) => d.kind + ":" + d.number)).size !== stored.length
+  )
+    throw new AppError(409, "Identitas/nomor perangkat duplikat");
+  const defaults = [...defaultDevices("chiller"), ...defaultDevices("freezer")];
+  for (const d of defaults) {
+    const match = stored.find(
+      (s) => s.kind === d.kind && s.number === d.number,
+    );
+    if (match && match.id !== d.id)
+      throw new AppError(409, "Identitas perangkat bawaan tidak boleh diganti");
+  }
+  const all = [
+    ...stored,
+    ...defaults
+      .filter((d) => !stored.some((s) => s.id === d.id))
+      .map((d) => ({ ...d, version: "initial-v1" })),
+  ];
+  return all
+    .filter((d) => includeInactive || d.active)
+    .sort((a, b) => a.kind.localeCompare(b.kind) || a.number - b.number);
+}
+async function validateMeasurementDevices(
+  kind: Kind,
+  input: MeasurementInput,
+  before?: Measurement,
+) {
+  if (!input.deviceRefs && before?.deviceRefs)
+    throw new AppError(
+      409,
+      "Pengukuran dinamis wajib mempertahankan identitas seluruh perangkat saat diedit.",
+    );
+  const requested =
+    input.deviceRefs ?? measurementRefs({ kind, values: input.values });
+  const known = await getTemperatureDevices(true),
+    previous = before ? measurementRefs(before) : [];
+  if (before && JSON.stringify(requested) !== JSON.stringify(previous))
+    throw new AppError(
+      409,
+      "Perangkat pada pengukuran historis tidak boleh ditukar atau dihapus. Buat pengukuran baru.",
+    );
+  for (const ref of requested) {
+    const d = known.find(
+      (d) => d.id === ref.id && d.kind === kind && d.number === ref.number,
+    );
+    if (!d || (!d.active && !previous.some((p) => p.id === d.id)))
+      throw new AppError(
+        400,
+        "Perangkat tidak terdaftar/aktif. Muat ulang daftar perangkat tanpa menghapus isian.",
+      );
+  }
+  if (
+    !before &&
+    input.deviceRefs &&
+    known.some(
+      (d) =>
+        d.kind === kind &&
+        d.active &&
+        !input.deviceRefs!.some((ref) => ref.id === d.id),
+    )
+  )
+    throw new AppError(
+      409,
+      "Daftar perangkat aktif berubah. Muat ulang konfigurasi dan lengkapi pengukuran.",
+    );
+}
+export async function registerTemperatureDevice(
+  kind: Kind,
+  id: string,
+  actor: Actor,
+  expectedNumber?: number,
+) {
+  if (actor.role !== "SUPER_ADMIN")
+    throw new AppError(
+      403,
+      "Hanya Super Admin dapat menambah perangkat permanen",
+    );
+  z.uuid().parse(id);
+  const all = await getTemperatureDevices(true),
+    ids = await ensureSheetHeaders(["TEMPERATURE_DEVICES", "AUDIT_LOG"]),
+    data = await rows("TEMPERATURE_DEVICES");
+  const existing = data.find((r) => r[0] === id);
+  if (existing) {
+    if (existing[1] !== kind || existing[7] !== actor.id)
+      throw new AppError(409, "Kunci perangkat sudah digunakan");
+    return all.find((d) => d.id === id)!;
+  }
+  if (
+    all.filter((d) => d.kind === kind && d.active).length >=
+    MAX_MEASUREMENT_DEVICES
+  )
+    throw new AppError(400, "Batas jumlah perangkat aktif tercapai");
+  const number =
+    Math.max(0, ...all.filter((d) => d.kind === kind).map((d) => d.number)) + 1;
+  if (expectedNumber !== undefined && expectedNumber !== number)
+    throw new AppError(
+      409,
+      "Nomor perangkat berubah. Muat ulang daftar sebelum mendaftarkan perangkat ini.",
+    );
+  if (number > MAX_DEVICE_NUMBER)
+    throw new AppError(400, "Nomor perangkat maksimum tercapai");
+  const now = new Date().toISOString(),
+    next = {
+      id,
+      kind,
+      number,
+      label: config[kind].label + " " + number,
+      active: true,
+      version: now,
+    };
+  const seeds = all
+    .filter((d) => !data.some((r) => r[0] === d.id))
+    .map((d) =>
+      append(ids.TEMPERATURE_DEVICES, [
+        d.id,
+        d.kind,
+        d.number,
+        d.label,
+        d.active,
+        now,
+        now,
+        actor.id,
+        actor.id,
+      ]),
+    );
+  await batch([
+    ...seeds,
+    append(ids.TEMPERATURE_DEVICES, [
+      id,
+      kind,
+      number,
+      next.label,
+      true,
+      now,
+      now,
+      actor.id,
+      actor.id,
+    ]),
+    audit(ids, actor, "REGISTER_TEMPERATURE_DEVICE", id, null, next, id, kind),
+  ]);
+  const confirmed = (await getTemperatureDevices(true)).find(
+    (d) => d.id === id,
+  );
+  if (!confirmed)
+    throw new AppError(
+      503,
+      "Pendaftaran perangkat belum dapat dikonfirmasi. Coba kembali dengan input yang sama.",
+    );
+  return confirmed;
+}
+export async function setTemperatureDeviceActive(
+  id: string,
+  active: boolean,
+  version: string,
+  actor: Actor,
+) {
+  if (actor.role !== "SUPER_ADMIN")
+    throw new AppError(
+      403,
+      "Hanya Super Admin dapat mengubah konfigurasi perangkat",
+    );
+  const all = await getTemperatureDevices(true),
+    old = all.find((d) => d.id === id);
+  if (!old) throw new AppError(404, "Perangkat tidak ditemukan");
+  if (old.active === active) return old;
+  if (old.version !== version)
+    throw new AppError(409, "Konfigurasi perangkat berubah. Muat ulang.");
+  if (
+    active &&
+    all.filter((d) => d.kind === old.kind && d.active).length >=
+      MAX_MEASUREMENT_DEVICES
+  )
+    throw new AppError(400, "Batas jumlah perangkat aktif tercapai");
+  const ids = await ensureSheetHeaders(["TEMPERATURE_DEVICES", "AUDIT_LOG"]),
+    data = await rows("TEMPERATURE_DEVICES"),
+    index = data.findIndex((r) => r[0] === id),
+    now = new Date(
+      Math.max(
+        Date.now(),
+        Number.isFinite(Date.parse(old.version))
+          ? Date.parse(old.version) + 1
+          : 0,
+      ),
+    ).toISOString();
+  const row = [
+    id,
+    old.kind,
+    old.number,
+    old.label,
+    active,
+    index < 1 ? now : data[index][5],
+    now,
+    index < 1 ? actor.id : data[index][7],
+    actor.id,
+  ];
+  await batch([
+    index < 1
+      ? append(ids.TEMPERATURE_DEVICES, row)
+      : replace(ids.TEMPERATURE_DEVICES, index, row),
+    audit(
+      ids,
+      actor,
+      active ? "ACTIVATE_TEMPERATURE_DEVICE" : "DEACTIVATE_TEMPERATURE_DEVICE",
+      id,
+      old,
+      { ...old, active, version: now },
+    ),
+  ]);
+  const confirmed = (await getTemperatureDevices(true)).find(
+    (d) => d.id === id,
+  );
+  if (!confirmed || confirmed.active !== active)
+    throw new AppError(503, "Perubahan perangkat belum dapat dikonfirmasi");
+  return confirmed;
+}

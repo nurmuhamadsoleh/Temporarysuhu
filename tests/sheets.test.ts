@@ -74,7 +74,8 @@ describe("Sheets API", () => {
       Object.assign(input, {
         devices: input.values.map((v) => ({
           ...emptyDeviceInput(),
-          ...(kind === "chiller" && v > 5
+          ...((kind === "chiller" && v > 5) ||
+          (kind === "freezer" && (v < -18 || v > -8))
             ? {
                 correctiveAction: "DATA UJI pemeriksaan",
                 performedBy: "Pelaksana Uji",

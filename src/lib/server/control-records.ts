@@ -1,3 +1,8 @@
+import {
+  MAX_DEVICE_NUMBER,
+  measurementIndex,
+  measurementValue,
+} from "@/lib/devices";
 import "server-only";
 import { createHash } from "node:crypto";
 import {
@@ -13,7 +18,6 @@ import {
 import { AppError } from "./errors";
 import {
   dateSchema,
-  config,
   type Actor,
   type Kind,
   type Measurement,
@@ -139,15 +143,13 @@ export async function getCorrectiveActionsForReport(
   const q = z
     .object({
       deviceType: z.enum(["chiller", "freezer"]),
-      deviceNumber: z.number().int().min(1).max(5),
+      deviceNumber: z.number().int().min(1).max(MAX_DEVICE_NUMBER),
       startDate: dateSchema,
       endDate: dateSchema,
     })
     .strict()
     .refine(
-      (q) =>
-        q.startDate <= q.endDate &&
-        q.deviceNumber <= config[q.deviceType].count,
+      (q) => q.startDate <= q.endDate,
       "Filter perangkat/periode tidak valid",
     )
     .parse(query);
@@ -161,7 +163,7 @@ export async function getCorrectiveActionsForReport(
           r.kind === q.deviceType &&
           r.date >= q.startDate &&
           r.date <= q.endDate &&
-          r.values.length >= q.deviceNumber,
+          measurementIndex(r, q.deviceNumber) >= 0,
       )
       .map((r) => [r.id, r]),
   );
@@ -216,7 +218,7 @@ export async function createCorrection(
     );
   const records = await getRecords(input.deviceType),
     record = records.find((r) => r.id === input.recordId);
-  if (!record || input.deviceNumber > record.values.length)
+  if (!record || measurementIndex(record, input.deviceNumber) < 0)
     throw new AppError(404, "Record/perangkat tidak ditemukan");
   if (actor.role === "PETUGAS" && record.createdBy !== actor.id)
     throw new AppError(
@@ -258,9 +260,9 @@ export async function createCorrection(
     now,
     input.performedByName ?? actor.name,
     "",
-    record.values[input.deviceNumber - 1],
-    record.deviceStates?.[input.deviceNumber - 1]?.temperatureStatus ||
-      record.status,
+    measurementValue(record, input.deviceNumber) ?? null,
+    record.deviceStates?.[measurementIndex(record, input.deviceNumber)]
+      ?.temperatureStatus || record.status,
     input.actionStatus || "PENDING",
     actor.id,
     actor.id,
@@ -306,10 +308,29 @@ export async function getControlData(filter: ControlFilter, id = "PREVIEW") {
     getSop(),
     getCorrections(),
   ]);
-  const records = selectControlRecords(all, filter),
+  const records = selectControlRecords(all, filter).filter(
+      (r) => measurementIndex(r, filter.deviceNumber) >= 0,
+    ),
     readings = normalizeReadings(records, filter, sop);
   if (readings.length > 2000)
     throw new AppError(400, "Persempit laporan (maksimum 2000 pembacaan)");
+  let reportSop = sop[filter.kind];
+  let normalRangeNote: string | undefined;
+  if (filter.kind === "freezer" && records.length) {
+    const ranges = records.map((r) => r.policy?.freezer ?? null),
+      first = ranges[0];
+    if (
+      first &&
+      ranges.every((p) => p && p.min === first.min && p.max === first.max)
+    )
+      reportSop = { min: first.min, max: first.max };
+    else {
+      reportSop = null;
+      normalRangeNote = ranges.every((p) => p === null)
+        ? "Belum ditetapkan saat pencatatan"
+        : "Mengikuti SOP masing-masing pengukuran";
+    }
+  }
   const dates = reportDates(filter);
   const matched = await getCorrectiveActionsForReport(
     {
@@ -337,7 +358,7 @@ export async function getControlData(filter: ControlFilter, id = "PREVIEW") {
         filter,
         settings,
         version,
-        sop: sop[filter.kind],
+        sop: reportSop,
         readings: [...readings].sort((a, b) =>
           a.recordId.localeCompare(b.recordId),
         ),
@@ -356,7 +377,8 @@ export async function getControlData(filter: ControlFilter, id = "PREVIEW") {
       coldStorage: filter.coldStorage || "BELUM DIKONFIGURASI",
     },
     settings,
-    sop: sop[filter.kind],
+    sop: reportSop,
+    ...(normalRangeNote ? { normalRangeNote } : {}),
     readings,
     corrections,
     pages: makeControlPages(readings, filter, settings),

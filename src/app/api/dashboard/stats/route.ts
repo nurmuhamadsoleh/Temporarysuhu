@@ -4,6 +4,7 @@ import {
   getTemperatureStatistics,
   rows,
   getSop,
+  getTemperatureDevices,
 } from "@/lib/server/sheets";
 import { filterRecords } from "@/lib/domain";
 import { ok, fail } from "@/lib/server/errors";
@@ -17,6 +18,7 @@ export async function GET(req: Request) {
     const sop = await getSop();
     return ok({
       records,
+      devices: await getTemperatureDevices(),
       statistics: {
         ...getTemperatureStatistics(records, sop),
         signedReports: (await rows("REPORTS"))

@@ -1,3 +1,4 @@
+import { measurementRefs, measurementValue } from "@/lib/devices";
 import { readJson } from "@/lib/server/body";
 import { exportWorkbook } from "@/lib/server/excel";
 import { z } from "zod";
@@ -31,17 +32,18 @@ export async function POST(req: Request) {
     const records = filterRecords(await allRecords(), p);
     if (records.length > 10000)
       throw new AppError(400, "Persempit periode export");
+    const numbers = [
+      ...new Set(
+        records.flatMap((r) => measurementRefs(r).map((d) => d.number)),
+      ),
+    ].sort((a, b) => a - b);
     const data = [
       [
         "ID",
         "Tanggal",
         "Jam",
         "Jenis",
-        "Suhu 1",
-        "Suhu 2",
-        "Suhu 3",
-        "Suhu 4",
-        "Suhu 5",
+        ...numbers.map((n) => "Suhu " + n),
         "Petugas",
         "Status",
         "Keterangan",
@@ -51,7 +53,7 @@ export async function POST(req: Request) {
         displayDate(r.date),
         r.time,
         r.kind,
-        ...Array.from({ length: 5 }, (_, i) => r.values[i] ?? ""),
+        ...numbers.map((number) => measurementValue(r, number) ?? ""),
         r.officer,
         r.status,
         r.notes,

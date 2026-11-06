@@ -1,4 +1,5 @@
 "use client";
+import { type TemperatureDeviceConfig } from "@/lib/devices";
 import { signatureBlob } from "@/lib/client/canvas";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -71,6 +72,9 @@ export function ControlReports({
   actor: Actor;
   initialDate: string;
 }) {
+  const registry = useData<TemperatureDeviceConfig[]>(
+    "/api/devices?includeInactive=true",
+  );
   const [modal, modalContext] = Modal.useModal();
   const [form] = Form.useForm<Filters>(),
     [settingsForm] = Form.useForm(),
@@ -287,13 +291,13 @@ export function ControlReports({
               rules={[{ required: true }]}
             >
               <Select
-                options={Array.from(
-                  { length: config[selectedKind as Kind].count },
-                  (_, i) => ({
-                    value: i + 1,
-                    label: `${config[selectedKind as Kind].label} ${i + 1}`,
-                  }),
-                )}
+                loading={registry.loading}
+                options={(registry.data ?? [])
+                  .filter((d) => d.kind === selectedKind)
+                  .map((d) => ({
+                    value: d.number,
+                    label: d.label + (d.active ? "" : " (nonaktif · histori)"),
+                  }))}
               />
             </Form.Item>
             <Form.Item

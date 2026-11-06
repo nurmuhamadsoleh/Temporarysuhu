@@ -35,7 +35,7 @@ export async function PATCH(req: Request, c: Context) {
     const actor = await requireActor(["ADMIN", "PETUGAS"]);
     const { kind, id } = await params(c);
     operation.progress("validation");
-    const input = measurementSchema(kind).parse(await readJson(req));
+    const input = measurementSchema(kind).parse(await readJson(req, 2_000_000));
     operation.progress("storage");
     return operation.complete(
       ok(

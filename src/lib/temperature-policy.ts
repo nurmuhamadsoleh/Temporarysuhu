@@ -1,5 +1,7 @@
 import { z } from "./validation";
-import type { Kind } from "./domain";
+import type { Kind, Measurement } from "./domain";
+import { FREEZER_TEMPERATURE_POLICY } from "@/config/temperature";
+export { FREEZER_TEMPERATURE_POLICY };
 
 const decimal = z
   .number()
@@ -23,15 +25,22 @@ const bounds = (min: number, max: number) =>
 export const policyBoundsSchema = z
   .object({
     chiller: bounds(-2, 14).nullable(),
-    freezer: bounds(-22, -6).nullable(),
+    freezer: bounds(
+      FREEZER_TEMPERATURE_POLICY.minSlider,
+      FREEZER_TEMPERATURE_POLICY.maxSlider,
+    ).nullable(),
   })
   .strict();
 export type PolicyBounds = z.infer<typeof policyBoundsSchema>;
 export type TemperaturePolicy = PolicyBounds & { version: string };
 export const DEFAULT_TEMPERATURE_POLICY: TemperaturePolicy = {
-  version: "chiller-reference-v1",
+  version: "chiller-v1-freezer-brt-v1",
   chiller: { min: 0, max: 4, warningMax: 5 },
-  freezer: null,
+  freezer: {
+    min: FREEZER_TEMPERATURE_POLICY.normalMin,
+    max: FREEZER_TEMPERATURE_POLICY.normalMax,
+    warningMax: FREEZER_TEMPERATURE_POLICY.warningMax,
+  },
 };
 export type TemperatureStatusCode =
   | "NORMAL"
@@ -84,6 +93,14 @@ export const statusPalette = {
     requiresCorrectiveAction: false,
   },
 } as const;
+const freezerDescriptions = {
+  NORMAL: "Suhu Freezer dalam rentang normal.",
+  WARNING: "Suhu Freezer mendekati batas suhu tinggi.",
+  HIGH_TEMPERATURE: "Suhu Freezer terlalu tinggi. Pemeriksaan diperlukan.",
+  LOW_TEMPERATURE:
+    "Suhu Freezer berada di bawah rentang normal yang ditetapkan.",
+  UNFILLED: "Pengukuran suhu Freezer belum dilakukan.",
+};
 export function getTemperatureStatus(
   type: Kind,
   temperature: number | null,
@@ -99,7 +116,14 @@ export function getTemperatureStatus(
   else if (p.warningMax !== null && n <= Math.round(p.warningMax * 10))
     code = "WARNING";
   else code = "HIGH_TEMPERATURE";
-  return { code, ...statusPalette[code] };
+  return {
+    code,
+    ...statusPalette[code],
+    description:
+      type === "freezer" && code !== "UNKNOWN_SOP"
+        ? freezerDescriptions[code]
+        : statusPalette[code].description,
+  };
 }
 export const actionStatuses = ["PENDING", "PERBAIKAN", "SELESAI"] as const;
 export const actionStatusLabels = {
@@ -119,6 +143,7 @@ export type DeviceInput = z.infer<typeof deviceInputSchema>;
 export type DeviceState = DeviceInput & {
   actionId?: string;
   deviceNumber: number;
+  deviceId?: string;
   temperatureStatus: TemperatureStatusCode;
 };
 export const emptyDeviceInput = (): DeviceInput => ({
@@ -172,4 +197,44 @@ export function aggregateTemperatureStatus(
     order.find((code) => states.some((s) => s.temperatureStatus === code)) ??
     "UNFILLED"
   );
+}
+
+export type FreezerStatus =
+  "NORMAL" | "WARNING" | "HIGH_TEMPERATURE" | "LOW_TEMPERATURE" | "BELUM_DIISI";
+/** Convenience API for the initial policy; configured SOP callers use getTemperatureStatus. */
+export function getFreezerStatus(temperature: number | null): FreezerStatus {
+  const code = getTemperatureStatus(
+    "freezer",
+    temperature,
+    DEFAULT_TEMPERATURE_POLICY,
+  ).code;
+  if (code === "UNFILLED") return "BELUM_DIISI";
+  if (code === "UNKNOWN_SOP") throw new Error("Default Freezer policy missing");
+  return code;
+}
+/** Use the assessment captured with a reading, never today's policy for old data. */
+export function getRecordedTemperatureStatus(
+  record: Pick<Measurement, "kind" | "values" | "deviceStates" | "policy">,
+  index: number,
+): TemperatureStatusCode {
+  if (record.values[index] === null) return "UNFILLED";
+  const stored = record.deviceStates?.[index]?.temperatureStatus;
+  if (stored) return stored;
+  if (record.policy)
+    return getTemperatureStatus(
+      record.kind,
+      record.values[index],
+      record.policy,
+    ).code;
+  return "UNKNOWN_SOP";
+}
+export function countRecordedStatuses(records: Measurement[]) {
+  const counts = Object.fromEntries(
+    Object.keys(statusPalette).map((code) => [code, 0]),
+  ) as Record<TemperatureStatusCode, number>;
+  for (const record of records)
+    record.values.forEach(
+      (_, index) => counts[getRecordedTemperatureStatus(record, index)]++,
+    );
+  return counts;
 }

@@ -1,3 +1,4 @@
+import { measurementRefs } from "@/lib/devices";
 import "server-only";
 import {
   getControlData,
@@ -308,10 +309,31 @@ export async function generatePdf(
       true,
     );
     y -= 17;
-    text(
-      `${r.values.map((v, i) => `${i + 1}: ${v === null ? "Belum diisi" : v.toFixed(1).replace(".", ",") + " C"}`).join("     ")} | ${r.status}`,
+    const parts = r.values.map(
+      (v, i) =>
+        measurementRefs(r)[i].number +
+        ": " +
+        (v === null ? "Belum diisi" : v.toFixed(1).replace(".", ",") + " C"),
     );
-    y -= 17;
+    parts.push("Status: " + r.status);
+    let readingLine = "";
+    for (const part of parts) {
+      const candidate = readingLine ? readingLine + "     " + part : part;
+      if (
+        readingLine &&
+        font.widthOfTextAtSize(safeText(candidate), 10) > 760
+      ) {
+        if (y < 90) newPage();
+        text(readingLine);
+        y -= 17;
+        readingLine = part;
+      } else readingLine = candidate;
+    }
+    if (readingLine) {
+      if (y < 90) newPage();
+      text(readingLine);
+      y -= 17;
+    }
     for (let i = 0; i < r.notes.length; i += 115) {
       if (y < 90) newPage();
       text(r.notes.slice(i, i + 115));
