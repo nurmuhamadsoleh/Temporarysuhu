@@ -110,3 +110,147 @@ it("finds compact readings by stable device number despite gaps", () => {
   expect(measurementValue(r, 7)).toBe(-7.9);
   expect(measurementValue(r, 2)).toBeUndefined();
 });
+
+it.each([
+  [
+    "-22",
+    "LOW_TEMPERATURE",
+    "#2563EB",
+    "Suhu Freezer berada di bawah batas normal yang ditetapkan.",
+  ],
+  [
+    "-20",
+    "LOW_TEMPERATURE",
+    "#2563EB",
+    "Suhu Freezer berada di bawah batas normal yang ditetapkan.",
+  ],
+  [
+    "-18.1",
+    "LOW_TEMPERATURE",
+    "#2563EB",
+    "Suhu Freezer berada di bawah batas normal yang ditetapkan.",
+  ],
+  [
+    "-18",
+    "NORMAL",
+    "#16A34A",
+    "Suhu Freezer berada dalam rentang normal (-18°C sampai -10°C).",
+  ],
+  [
+    "-15,5",
+    "NORMAL",
+    "#16A34A",
+    "Suhu Freezer berada dalam rentang normal (-18°C sampai -10°C).",
+  ],
+  [
+    "-10",
+    "NORMAL",
+    "#16A34A",
+    "Suhu Freezer berada dalam rentang normal (-18°C sampai -10°C).",
+  ],
+  [
+    "-9.9",
+    "WARNING",
+    "#F59E0B",
+    "Suhu Freezer mulai melebihi batas normal. Lakukan pemeriksaan.",
+  ],
+  [
+    "-8",
+    "WARNING",
+    "#F59E0B",
+    "Suhu Freezer mulai melebihi batas normal. Lakukan pemeriksaan.",
+  ],
+  [
+    "-7.9",
+    "HIGH_TEMPERATURE",
+    "#DC2626",
+    "Suhu Freezer terlalu tinggi. Diperlukan pemeriksaan dan tindakan korektif.",
+  ],
+  [
+    "-6",
+    "HIGH_TEMPERATURE",
+    "#DC2626",
+    "Suhu Freezer terlalu tinggi. Diperlukan pemeriksaan dan tindakan korektif.",
+  ],
+  ["", "UNFILLED", "#64748B", "Pengukuran suhu Freezer belum dilakukan."],
+] as const)(
+  "shows status, border, accessible description and indicator for Freezer input %s",
+  (text, code, color, description) => {
+    const parsed = parseTemperatureText(text, "freezer");
+    expect(parsed.valid).toBe(true);
+    if (!parsed.valid) throw Error("invalid fixture");
+    const status = getTemperatureStatus(
+      "freezer",
+      parsed.value,
+      DEFAULT_TEMPERATURE_POLICY,
+    );
+    expect(status.code).toBe(code);
+    expect(status.description).toBe(description);
+    const html = renderToStaticMarkup(
+      <TemperatureInputField
+        id="freezer-live"
+        deviceType="freezer"
+        deviceNumber={6}
+        value={text}
+        status={status}
+        onChange={() => {}}
+      />,
+    );
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-label="Status suhu Freezer 6"');
+    expect(html).toContain(description);
+    expect(html).toContain("border-color:" + color);
+    expect(html).toContain("border-radius:999px");
+    expect(html).toContain("lucide-thermometer");
+    expect(html).not.toContain("ant-slider");
+  },
+);
+it("uses the approved snapshot range in Freezer descriptions without changing Chiller descriptions", () => {
+  const custom = {
+    ...DEFAULT_TEMPERATURE_POLICY,
+    version: "custom-range",
+    freezer: { min: -20, max: -12, warningMax: -9 },
+  };
+  expect(getTemperatureStatus("freezer", -15.5, custom).description).toBe(
+    "Suhu Freezer berada dalam rentang normal (-20°C sampai -12°C).",
+  );
+  expect(
+    getTemperatureStatus("chiller", 3.1, DEFAULT_TEMPERATURE_POLICY)
+      .description,
+  ).toBe("Suhu penyimpanan normal.");
+  const html = renderToStaticMarkup(
+    <TemperatureInputField
+      id="chiller-original"
+      deviceType="chiller"
+      deviceNumber={1}
+      value="3,1"
+      status={getTemperatureStatus("chiller", 3.1, DEFAULT_TEMPERATURE_POLICY)}
+      onChange={() => {}}
+    />,
+  );
+  expect(html).not.toContain("lucide-thermometer");
+  const inputMarkup = html.slice(
+    html.indexOf('<span class="ant-input-affix-wrapper'),
+    html.indexOf('<div id="chiller-original-status"'),
+  );
+  expect(inputMarkup).not.toContain("border-color:");
+});
+it("preserves incomplete Freezer text without mislabeling it as empty or normal and prioritizes validation errors", () => {
+  const html = renderToStaticMarkup(
+    <TemperatureInputField
+      id="incomplete-freezer"
+      deviceType="freezer"
+      deviceNumber={1}
+      value="-15,"
+      status={null}
+      error="Lengkapi nilai suhu"
+      onChange={() => {}}
+    />,
+  );
+  expect(html).toContain('value="-15,"');
+  expect(html).toContain("LENGKAPI NILAI SUHU");
+  expect(html).toContain('aria-invalid="true"');
+  expect(html).toContain("border-color:#DC2626");
+  expect(html).not.toContain(">BELUM DIISI<");
+  expect(html).not.toContain(">NORMAL<");
+});

@@ -78,7 +78,9 @@ describe("Initial Freezer SOP", () => {
       );
       expect(html).toContain("-13,5°C");
       expect(html).toContain("NORMAL");
-      expect(html).toContain("Suhu Freezer dalam rentang normal.");
+      expect(html).toContain(
+        "Suhu Freezer berada dalam rentang normal (-18°C sampai -10°C).",
+      );
       expect(html).toContain('aria-orientation="vertical"');
       expect(html).toContain('aria-valuemin="-22"');
       expect(html).toContain('aria-valuemax="-6"');

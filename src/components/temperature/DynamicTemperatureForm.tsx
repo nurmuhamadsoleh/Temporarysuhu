@@ -78,7 +78,15 @@ export function DynamicTemperatureForm({
                       ? getTemperatureStatus(kind, value, policy)
                       : null
                   }
-                  onChange={field.onChange}
+                  onChange={(text) => {
+                    field.onChange(text);
+                    if (
+                      kind === "freezer" &&
+                      fieldState.error &&
+                      parseTemperatureText(text, kind).valid
+                    )
+                      void trigger(`values.${index}`);
+                  }}
                   onBlur={() => {
                     field.onBlur();
                     void trigger(`values.${index}`);

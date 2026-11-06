@@ -92,9 +92,12 @@ const server = createServer((req, res) => {
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const base = "http://127.0.0.1:" + server.address().port;
-const output = "output/dynamic-inputs";
+const artifact = process.env.QA_ARTIFACT_DIR || "dynamic-inputs";
+if (!/^[a-z0-9-]+$/.test(artifact))
+  throw new Error("Invalid QA artifact directory");
+const output = "output/" + artifact;
 await mkdir(output, { recursive: true });
-await mkdir("docs/dynamic-inputs", { recursive: true });
+await mkdir("docs/" + artifact, { recursive: true });
 const result = {
   at: new Date().toISOString(),
   mode: "real dynamic form and report selector with isolated API fixtures; no production writes",
@@ -302,6 +305,94 @@ try {
         await page.locator(".temperature-input-card").first().innerText()
       ).includes("LENGKAPI NILAI SUHU"),
     );
+    if (kind === "freezer") {
+      const card = page.locator(".temperature-input-card").first();
+      const second = page.getByLabel("Suhu Freezer 2", { exact: true });
+      const secondCard = page.locator(".temperature-input-card").nth(1);
+      await second.fill("-7");
+      await page
+        .locator("#freezer-2-action")
+        .fill("TEST ONLY retained corrective action");
+      await page.locator("#freezer-2-by").fill("TEST ONLY retained performer");
+      await page.locator("#freezer-2-status").click();
+      await page
+        .locator(".ant-select-dropdown:visible")
+        .getByText("Perbaikan", { exact: true })
+        .click();
+      const boundaryCases = [
+        ["-22", "LOW TEMPERATURE", "rgb(37, 99, 235)"],
+        ["-20", "LOW TEMPERATURE", "rgb(37, 99, 235)"],
+        ["-18.1", "LOW TEMPERATURE", "rgb(37, 99, 235)"],
+        ["-18", "NORMAL", "rgb(22, 163, 74)"],
+        ["-15,5", "NORMAL", "rgb(22, 163, 74)"],
+        ["-10", "NORMAL", "rgb(22, 163, 74)"],
+        ["-9.9", "WARNING", "rgb(245, 158, 11)"],
+        ["-8", "WARNING", "rgb(245, 158, 11)"],
+        ["-7.9", "HIGH TEMPERATURE", "rgb(220, 38, 38)"],
+        ["-6", "HIGH TEMPERATURE", "rgb(220, 38, 38)"],
+        ["", "BELUM DIISI", "rgb(100, 116, 139)"],
+      ];
+      for (const [text, label, color] of boundaryCases) {
+        await first.fill(text);
+        await card
+          .getByRole("status")
+          .getByText(label, { exact: true })
+          .waitFor();
+        await page.waitForFunction(
+          ({ id, color }) =>
+            getComputedStyle(
+              document.getElementById(id).closest(".ant-input-affix-wrapper"),
+            ).borderColor === color,
+          { id: await first.getAttribute("id"), color },
+        );
+        assert.equal(await first.inputValue(), text);
+        assert.ok(
+          (await secondCard.getByRole("status").innerText()).includes(
+            "HIGH TEMPERATURE",
+          ),
+        );
+        assert.equal(
+          await page.locator("#freezer-2-action").inputValue(),
+          "TEST ONLY retained corrective action",
+        );
+      }
+      await first.fill("-15,");
+      await first.blur();
+      await card.getByText("LENGKAPI NILAI SUHU", { exact: true }).waitFor();
+      assert.equal(await first.inputValue(), "-15,");
+      await first.fill("-15.5");
+      await card.getByText("NORMAL", { exact: true }).waitFor();
+      await page.waitForFunction(
+        (id) =>
+          !document.getElementById(id).getAttribute("aria-invalid") ||
+          document.getElementById(id).getAttribute("aria-invalid") === "false",
+        await first.getAttribute("id"),
+      );
+      assert.ok(
+        (await card.getByRole("status").innerText()).includes(
+          "Suhu Freezer berada dalam rentang normal (-18°C sampai -10°C).",
+        ),
+      );
+      for (const value of ["-15.5", "-20", "-7"]) {
+        await second.fill(value);
+        assert.equal(
+          await page.locator("#freezer-2-action").inputValue(),
+          "TEST ONLY retained corrective action",
+        );
+        assert.equal(
+          await page.locator("#freezer-2-by").inputValue(),
+          "TEST ONLY retained performer",
+        );
+      }
+      result.freezerStatusChecks = {
+        boundaries: boundaryCases.length,
+        borderAndBadge: true,
+        descriptions: true,
+        incompleteRecovery: true,
+        independentDevices: true,
+        correctiveActionPreserved: true,
+      };
+    }
     const comma = kind === "chiller" ? "3,1" : "-15,5";
     await first.fill(comma);
     await first.blur();
@@ -374,6 +465,17 @@ try {
       kind === "chiller" ? 4.5 : -9.9,
     );
     assert.equal(state.saves[2].body.values[2], null);
+    if (kind === "freezer") {
+      assert.equal(
+        state.saves[2].body.devices[1].correctiveAction,
+        "TEST ONLY retained corrective action",
+      );
+      assert.equal(
+        state.saves[2].body.devices[1].performedBy,
+        "TEST ONLY retained performer",
+      );
+      assert.equal(state.saves[2].body.devices[1].actionStatus, "PERBAIKAN");
+    }
     assert.equal(state.saves[2].body.deviceRefs.length, count);
     assert.equal(await first.inputValue(), "");
     assert.ok(state.historyReads > reads);
@@ -517,6 +619,17 @@ try {
   assert.equal(state.saves.length, 2);
   await page.reload();
   await page.getByLabel("Suhu Freezer 8", { exact: true }).waitFor();
+  await page.getByLabel("Suhu Freezer 7", { exact: true }).fill("-15,5");
+  await page.getByLabel("Suhu Freezer 8", { exact: true }).fill("-7");
+  await page
+    .getByRole("status", { name: "Status suhu Freezer 7", exact: true })
+    .getByText("NORMAL", { exact: true })
+    .waitFor();
+  await page
+    .getByRole("status", { name: "Status suhu Freezer 8", exact: true })
+    .getByText("HIGH TEMPERATURE", { exact: true })
+    .waitFor();
+  result.freezerStatusChecks.additionalDevicesIndependent = true;
   for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     if (productionCss) {
@@ -568,7 +681,7 @@ try {
   await new Promise((resolve) => server.close(resolve));
 }
 await writeFile(
-  "docs/dynamic-inputs/browser-results.json",
+  "docs/" + artifact + "/browser-results.json",
   JSON.stringify(result, null, 2),
 );
 console.log(JSON.stringify(result, null, 2));

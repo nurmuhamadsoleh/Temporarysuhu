@@ -94,13 +94,16 @@ export const statusPalette = {
   },
 } as const;
 const freezerDescriptions = {
-  NORMAL: "Suhu Freezer dalam rentang normal.",
-  WARNING: "Suhu Freezer mendekati batas suhu tinggi.",
-  HIGH_TEMPERATURE: "Suhu Freezer terlalu tinggi. Pemeriksaan diperlukan.",
-  LOW_TEMPERATURE:
-    "Suhu Freezer berada di bawah rentang normal yang ditetapkan.",
+  NORMAL: "Suhu Freezer berada dalam rentang normal.",
+  WARNING: "Suhu Freezer mulai melebihi batas normal. Lakukan pemeriksaan.",
+  HIGH_TEMPERATURE:
+    "Suhu Freezer terlalu tinggi. Diperlukan pemeriksaan dan tindakan korektif.",
+  LOW_TEMPERATURE: "Suhu Freezer berada di bawah batas normal yang ditetapkan.",
   UNFILLED: "Pengukuran suhu Freezer belum dilakukan.",
 };
+const policyRangeFormat = new Intl.NumberFormat("id-ID", {
+  maximumFractionDigits: 1,
+});
 export function getTemperatureStatus(
   type: Kind,
   temperature: number | null,
@@ -121,7 +124,9 @@ export function getTemperatureStatus(
     ...statusPalette[code],
     description:
       type === "freezer" && code !== "UNKNOWN_SOP"
-        ? freezerDescriptions[code]
+        ? code === "NORMAL" && p
+          ? `Suhu Freezer berada dalam rentang normal (${policyRangeFormat.format(p.min)}°C sampai ${policyRangeFormat.format(p.max)}°C).`
+          : freezerDescriptions[code]
         : statusPalette[code].description,
   };
 }
