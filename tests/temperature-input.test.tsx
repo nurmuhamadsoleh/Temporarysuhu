@@ -54,9 +54,9 @@ it.each([
   expect(parseTemperatureText(text, kind).valid).toBe(false),
 );
 it("uses approved default counts with stable identities", () => {
-  expect(DEFAULT_CHILLER_COUNT).toBe(5);
-  expect(DEFAULT_FREEZER_COUNT).toBe(6);
-  expect(defaultDevices("freezer")).toHaveLength(6);
+  expect(DEFAULT_CHILLER_COUNT).toBe(6);
+  expect(DEFAULT_FREEZER_COUNT).toBe(5);
+  expect(defaultDevices("freezer")).toHaveLength(5);
   expect(defaultDevices("freezer")).toEqual(defaultDevices("freezer"));
 });
 it("renders Ant Design Basic Input with readable Celsius suffix and decimal keyboard", () => {
@@ -172,7 +172,7 @@ it.each([
     "#DC2626",
     "Suhu Freezer terlalu tinggi. Diperlukan pemeriksaan dan tindakan korektif.",
   ],
-  ["", "UNFILLED", "#64748B", "Pengukuran suhu Freezer belum dilakukan."],
+  ["", "UNFILLED", "#64748B", "Pengukuran suhu belum dilakukan."],
 ] as const)(
   "shows status, border, accessible description and indicator for Freezer input %s",
   (text, code, color, description) => {

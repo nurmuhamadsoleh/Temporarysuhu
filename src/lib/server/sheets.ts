@@ -648,15 +648,6 @@ export async function getRecords(kind: Kind) {
             "Penilaian suhu tersimpan tidak cocok dengan pengukuran / versi SOP",
           );
       }
-      if (
-        r.values.some(
-          (v, i) => v === null && !r.deviceStates?.[i]?.missingReason,
-        )
-      )
-        throw new AppError(
-          409,
-          "Suhu kosong tanpa alasan tersimpan. Periksa integritas pengukuran.",
-        );
       return r;
     });
 }
@@ -737,7 +728,11 @@ async function deviceWriteRequests(
       ...defaultDevices("chiller"),
       ...defaultDevices("freezer"),
     ])
-      if (!registry.some((row) => row[0] === device.id))
+      if (
+        !registry.some(
+          (row) => row[1] === device.kind && row[2] === device.number,
+        )
+      )
         requests.push(
           append(ids.TEMPERATURE_DEVICES, [
             device.id,
@@ -1116,13 +1111,16 @@ export async function getTemperatureDevices(
     const match = stored.find(
       (s) => s.kind === d.kind && s.number === d.number,
     );
-    if (match && match.id !== d.id)
+    // Chiller 6 may already have been registered with its own stable ID.
+    if (match && match.id !== d.id && !(d.kind === "chiller" && d.number === 6))
       throw new AppError(409, "Identitas perangkat bawaan tidak boleh diganti");
   }
   const all = [
     ...stored,
     ...defaults
-      .filter((d) => !stored.some((s) => s.id === d.id))
+      .filter(
+        (d) => !stored.some((s) => s.kind === d.kind && s.number === d.number),
+      )
       .map((d) => ({ ...d, version: "initial-v1" })),
   ];
   return all

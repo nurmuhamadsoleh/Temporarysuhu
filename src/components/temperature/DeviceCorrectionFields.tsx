@@ -20,7 +20,6 @@ export type MeasurementFields = {
 export function DeviceCorrectionFields({
   index,
   deviceNumber,
-  incomplete = false,
   value,
   type,
   policy,
@@ -29,7 +28,6 @@ export function DeviceCorrectionFields({
 }: {
   index: number;
   deviceNumber?: number;
-  incomplete?: boolean;
   value: number | null;
   type: Kind;
   policy: TemperaturePolicy;
@@ -41,43 +39,6 @@ export function DeviceCorrectionFields({
   return (
     <div className="device-correction-fields">
       <Form component={false} layout="vertical">
-        {value === null && !incomplete && (
-          <Controller
-            control={control}
-            name={`devices.${index}.missingReason`}
-            rules={{ required: "Alasan belum diukur wajib diisi" }}
-            render={({ field, fieldState }) => (
-              <Form.Item
-                label="Alasan belum diukur"
-                required
-                htmlFor={`${prefix}-reason`}
-                validateStatus={fieldState.error ? "error" : undefined}
-                help={fieldState.error?.message}
-              >
-                <Select
-                  aria-label={`Pilihan alasan ${type} ${deviceNumber ?? index + 1}`}
-                  placeholder="Pilih alasan atau tulis di bawah"
-                  value={undefined}
-                  disabled={disabled}
-                  onChange={field.onChange}
-                  options={[
-                    "Perangkat tidak beroperasi",
-                    "Alat ukur tidak tersedia",
-                    "Akses perangkat terhalang",
-                  ].map((value) => ({ value, label: value }))}
-                />
-                <Input.TextArea
-                  {...field}
-                  id={`${prefix}-reason`}
-                  disabled={disabled}
-                  rows={2}
-                  maxLength={1000}
-                  placeholder="Jelaskan alasan pengukuran belum dilakukan."
-                />
-              </Form.Item>
-            )}
-          />
-        )}
         <h4>Koreksi / Tindakan Korektif</h4>
         <Controller
           control={control}

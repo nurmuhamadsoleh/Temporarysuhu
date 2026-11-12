@@ -99,7 +99,7 @@ const freezerDescriptions = {
   HIGH_TEMPERATURE:
     "Suhu Freezer terlalu tinggi. Diperlukan pemeriksaan dan tindakan korektif.",
   LOW_TEMPERATURE: "Suhu Freezer berada di bawah batas normal yang ditetapkan.",
-  UNFILLED: "Pengukuran suhu Freezer belum dilakukan.",
+  UNFILLED: "Pengukuran suhu belum dilakukan.",
 };
 const policyRangeFormat = new Intl.NumberFormat("id-ID", {
   maximumFractionDigits: 1,
@@ -163,12 +163,17 @@ export function validateDeviceInputs(
   devices: DeviceInput[],
   policy: TemperaturePolicy,
 ) {
+  if (values.length && values.every((value) => value === null))
+    return [
+      {
+        deviceNumber: 1,
+        message: "Isi minimal satu pembacaan suhu untuk menyimpan pengukuran.",
+      },
+    ];
   return values.flatMap((value, i) => {
     const d = devices[i] ?? emptyDeviceInput(),
       status = getTemperatureStatus(type, value, policy);
     const errors: string[] = [];
-    if (value === null && !d.missingReason.trim())
-      errors.push("Alasan belum dilakukan pengukuran wajib diisi");
     if (status.requiresCorrectiveAction && !d.correctiveAction.trim())
       errors.push("Keterangan / tindakan korektif wajib diisi");
     if (

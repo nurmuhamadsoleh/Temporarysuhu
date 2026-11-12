@@ -1,6 +1,6 @@
 import type { Kind, Measurement } from "./domain";
-export const DEFAULT_CHILLER_COUNT = 5;
-export const DEFAULT_FREEZER_COUNT = 6;
+export const DEFAULT_CHILLER_COUNT = 6;
+export const DEFAULT_FREEZER_COUNT = 5;
 /** Fixed legacy sheet widths. Never expand these into the metadata columns. */
 export const LEGACY_DEVICE_COUNTS = { chiller: 5, freezer: 4 } as const;
 export const MAX_MEASUREMENT_DEVICES = 128;

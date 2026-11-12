@@ -181,13 +181,9 @@ it("atomically saves null, reasons, per-device actions, actor identity and SOP v
   expect(m.batch).toHaveBeenCalledTimes(count);
   expect(await getCorrections()).toHaveLength(2);
 });
-it("rejects unfilled devices without reasons, missing required corrections and stale SOP versions", async () => {
+it("rejects missing required abnormal corrections and stale SOP versions without requiring missing reasons", async () => {
   const body = input();
   body.devices![4].missingReason = "";
-  await expect(
-    createTemperatureRecord("chiller", body, actor, "k", "h"),
-  ).rejects.toThrow("Alasan");
-  body.devices![4].missingReason = "DATA UJI";
   body.devices![2].correctiveAction = "";
   await expect(
     createTemperatureRecord("chiller", body, actor, "k", "h"),
@@ -200,28 +196,18 @@ it("rejects unfilled devices without reasons, missing required corrections and s
   expect(tables["Suhu Chiller"]).toHaveLength(1);
   expect(m.batch).not.toHaveBeenCalled();
 });
-it("allows all-null measurements only with a reason for every device and excludes null from averages", async () => {
+it("rejects all-null sessions even when old clients send reasons", async () => {
   const body = input();
   body.values.fill(null);
   body.devices = body.values.map(() => ({
     ...emptyDeviceInput(),
-    missingReason: "DATA UJI: belum diukur",
+    missingReason: "Historical-compatible reason",
   }));
-  const record = await createTemperatureRecord(
-    "chiller",
-    body,
-    actor,
-    "k",
-    "h",
-  );
-  expect(record.values.every((v) => v === null)).toBe(true);
-  expect(await getCorrections()).toEqual([]);
-  expect(
-    getTemperatureStatistics([record], {
-      chiller: { min: 0, max: 4 },
-      freezer: null,
-    }).chillerAverage,
-  ).toBeNull();
+  expect(measurementSchema("chiller").safeParse(body).success).toBe(false);
+  await expect(
+    createTemperatureRecord("chiller", body, actor, "k", "h"),
+  ).rejects.toThrow("minimal satu");
+  expect(m.batch).not.toHaveBeenCalled();
 });
 it("protects policy changes server-side and preserves the historical assessment after SOP changes", async () => {
   const body = input(),
@@ -553,52 +539,67 @@ it("keeps historical Freezer readings unassessed under their original null polic
   expect(data.report.sourceHash).toBe(originalSourceHash);
 });
 
-it("saves four missing Freezer readings as null with their own reasons, never zeros or invented actions", async () => {
-  const body = measurementSchema("freezer").parse({
-    ...input(),
-    values: [null, null, null, null],
-    devices: Array.from({ length: 4 }, (_, i) => ({
-      ...emptyDeviceInput(),
-      missingReason: "DATA UJI: Freezer " + (i + 1) + " tidak beroperasi",
-    })),
-  });
-  const saved = await createTemperatureRecord(
-    "freezer",
-    body,
-    actor,
-    "missing-freezer-key",
-    "missing-freezer-hash",
-  );
-  expect(saved.values).toEqual([null, null, null, null]);
-  expect(tables["Suhu Freezer"][1].slice(3, 7)).toEqual(["", "", "", ""]);
-  expect(
-    saved.deviceStates?.every(
-      (d) => d.temperatureStatus === "UNFILLED" && d.missingReason,
-    ),
-  ).toBe(true);
-  expect(await getCorrections()).toEqual([]);
-  expect(
-    getTemperatureStatistics([saved], {
-      chiller: DEFAULT_TEMPERATURE_POLICY.chiller,
-      freezer: DEFAULT_TEMPERATURE_POLICY.freezer,
-    }),
-  ).toMatchObject({
-    freezerAverage: null,
-    freezerStatusCounts: { UNFILLED: 4, NORMAL: 0 },
-  });
-});
+it.each(["chiller", "freezer"] as const)(
+  "saves partial %s sessions without reasons or invented actions and reads null back",
+  async (kind) => {
+    const count = kind === "chiller" ? 5 : 4;
+    const body = measurementSchema(kind).parse({
+      ...input(),
+      values: Array.from({ length: count }, (_, i) =>
+        i === 0 ? (kind === "chiller" ? 0 : -15.5) : null,
+      ),
+      devices: Array.from({ length: count }, emptyDeviceInput),
+    });
+    const saved = await createTemperatureRecord(
+      kind,
+      body,
+      actor,
+      "partial-key",
+      "hash",
+    );
+    expect(saved.values).toEqual(body.values);
+    expect(
+      saved.deviceStates
+        ?.slice(1)
+        .every((d) => d.temperatureStatus === "UNFILLED" && !d.missingReason),
+    ).toBe(true);
+    expect(await getCorrections()).toEqual([]);
+    expect((await getRecords(kind))[0].values).toEqual(body.values);
+    expect(
+      tables[kind === "chiller" ? "Suhu Chiller" : "Suhu Freezer"][1][4],
+    ).toBe("");
+  },
+);
+function existingFreezerSix() {
+  if (!tables.TEMPERATURE_DEVICES.some((r) => r[1] === "freezer" && r[2] === 6))
+    tables.TEMPERATURE_DEVICES.push([
+      "default-freezer-6",
+      "freezer",
+      6,
+      "Freezer 6",
+      true,
+      "2026-11-01",
+      "existing-v1",
+      actor.id,
+      actor.id,
+    ]);
+}
 
 function dynamicFreezer(
   values: (number | null)[],
-  refs = defaultDevices("freezer").map((d) => ({ id: d.id, number: d.number })),
+  refs = Array.from({ length: values.length }, (_, i) => ({
+    id: "default-freezer-" + (i + 1),
+    number: i + 1,
+  })),
 ) {
+  if (refs.some((r) => r.id === "default-freezer-6")) existingFreezerSix();
   return measurementSchema("freezer").parse({
     ...input(),
     values,
     deviceRefs: refs,
     devices: values.map((v, index) => ({
       ...emptyDeviceInput(),
-      missingReason: v === null ? "DATA UJI: alat tidak beroperasi" : "",
+      missingReason: "",
       correctiveAction:
         v !== null && (v < -18 || v > -8)
           ? "DATA UJI: pemeriksaan perangkat " + refs[index].number
@@ -607,26 +608,26 @@ function dynamicFreezer(
     })),
   });
 }
-it("reads five Chillers and six Freezers, registers a permanent seventh device once, and never reuses deactivated numbers", async () => {
+it("reads six Chillers and five Freezers, registers a permanent sixth device once, and never reuses deactivated numbers", async () => {
   const initial = await getTemperatureDevices();
-  expect(initial.filter((d) => d.kind === "chiller")).toHaveLength(5);
-  expect(initial.filter((d) => d.kind === "freezer")).toHaveLength(6);
+  expect(initial.filter((d) => d.kind === "chiller")).toHaveLength(6);
+  expect(initial.filter((d) => d.kind === "freezer")).toHaveLength(5);
   expect(m.batch).not.toHaveBeenCalled();
   const admin = { ...actor, role: "SUPER_ADMIN" as const },
     id = crypto.randomUUID();
   await expect(
     registerTemperatureDevice("freezer", id, actor),
   ).rejects.toMatchObject({ status: 403 });
-  const added = await registerTemperatureDevice("freezer", id, admin, 7);
-  expect(added.number).toBe(7);
+  const added = await registerTemperatureDevice("freezer", id, admin, 6);
+  expect(added.number).toBe(6);
   const writes = m.batch.mock.calls.length;
-  expect(await registerTemperatureDevice("freezer", id, admin, 7)).toEqual(
+  expect(await registerTemperatureDevice("freezer", id, admin, 6)).toEqual(
     added,
   );
   expect(m.batch).toHaveBeenCalledTimes(writes);
   expect(
     (await getTemperatureDevices()).filter((d) => d.kind === "freezer"),
-  ).toHaveLength(7);
+  ).toHaveLength(6);
   const inactive = await setTemperatureDeviceActive(
     id,
     false,
@@ -637,13 +638,13 @@ it("reads five Chillers and six Freezers, registers a permanent seventh device o
   expect(
     (await getTemperatureDevices(true)).find((d) => d.id === id)?.active,
   ).toBe(false);
-  const eighth = await registerTemperatureDevice(
+  const seventh = await registerTemperatureDevice(
     "freezer",
     crypto.randomUUID(),
     admin,
-    8,
+    7,
   );
-  expect(eighth.number).toBe(8);
+  expect(seventh.number).toBe(7);
   await setTemperatureDeviceActive(id, true, inactive.version, admin);
   expect((await getTemperatureDevices()).some((d) => d.id === id)).toBe(true);
 });
@@ -730,6 +731,7 @@ it("persists six Freezers in normalized rows while keeping all existing legacy m
   expect(report.report.corrections).toHaveLength(1);
 });
 it("keeps device identities, values and report actions aligned across inactive gaps and protects historical edit mappings", async () => {
+  existingFreezerSix();
   const admin = { ...actor, role: "SUPER_ADMIN" as const },
     added = await registerTemperatureDevice(
       "freezer",
@@ -950,4 +952,89 @@ it("preserves all dynamic readings and identities in the authorized delete audit
   expect(before.policyVersion).toBe(saved.policyVersion);
   expect(tables.TEMPERATURE_READINGS.slice(1)).toHaveLength(6);
   expect(await getRecords("freezer")).toEqual([]);
+});
+
+it("preserves an already registered Chiller 6 ID and saves Chiller 7 without shifting legacy metadata", async () => {
+  const sixthId = crypto.randomUUID();
+  tables.TEMPERATURE_DEVICES.push([
+    sixthId,
+    "chiller",
+    6,
+    "Chiller 6",
+    true,
+    "2026-11-01",
+    "existing-v1",
+    actor.id,
+    actor.id,
+  ]);
+  const defaults = await getTemperatureDevices();
+  expect(defaults.filter((d) => d.kind === "chiller")).toHaveLength(6);
+  expect(defaults.find((d) => d.kind === "chiller" && d.number === 6)?.id).toBe(
+    sixthId,
+  );
+  const seventh = await registerTemperatureDevice(
+    "chiller",
+    crypto.randomUUID(),
+    { ...actor, role: "SUPER_ADMIN" },
+    7,
+  );
+  const refs = (await getTemperatureDevices())
+    .filter((d) => d.kind === "chiller")
+    .map((d) => ({ id: d.id, number: d.number }));
+  const body = measurementSchema("chiller").parse({
+    ...input(),
+    deviceRefs: refs,
+    values: [3.1, null, 3.1, 3.1, 3.1, 2.3, 1.8],
+    devices: refs.map(emptyDeviceInput),
+  });
+  const saved = await createTemperatureRecord(
+    "chiller",
+    body,
+    actor,
+    "chiller-seven",
+    "hash",
+  );
+  expect(measurementValue(saved, 6)).toBe(2.3);
+  expect(measurementValue(saved, 7)).toBe(1.8);
+  expect(measurementRefs(saved)[6].id).toBe(seventh.id);
+  expect(tables["Suhu Chiller"][1][8]).toBe(actor.name);
+  expect(tables["Suhu Chiller"][1]).toHaveLength(
+    headers["Suhu Chiller"].length,
+  );
+  expect(
+    tables.TEMPERATURE_DEVICES.filter((r) => r[1] === "chiller" && r[2] === 6),
+  ).toHaveLength(1);
+  const report = await getControlData({
+    kind: "chiller",
+    deviceNumber: 6,
+    month: 11,
+    year: 2026,
+    from: "2026-11-02",
+    to: "2026-11-02",
+    coldStorage: "",
+    officer: "",
+  });
+  expect(report.report.readings[0]).toMatchObject({
+    temperatureCelsius: 2.3,
+    deviceId: sixthId,
+  });
+  expect(
+    getTemperatureStatistics([saved], {
+      chiller: DEFAULT_TEMPERATURE_POLICY.chiller,
+      freezer: DEFAULT_TEMPERATURE_POLICY.freezer,
+    }),
+  ).toMatchObject({ chillerAverage: 2.75, chillerCount: 1, alerts: 0 });
+});
+it("keeps stored active Freezer 6 visible despite the new five-device default", async () => {
+  expect(
+    (await getTemperatureDevices()).filter((d) => d.kind === "freezer"),
+  ).toHaveLength(5);
+  existingFreezerSix();
+  expect(
+    (await getTemperatureDevices()).filter((d) => d.kind === "freezer"),
+  ).toHaveLength(6);
+  expect(
+    (await getTemperatureDevices()).find((d) => d.id === "default-freezer-6"),
+  ).toMatchObject({ number: 6, active: true, version: "existing-v1" });
+  expect(m.batch).not.toHaveBeenCalled();
 });

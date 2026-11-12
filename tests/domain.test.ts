@@ -22,12 +22,21 @@ describe("Form validation and integrity", () => {
     for (const values of [
       [],
       ["0", 2, 4, 6, 8],
-      [null, 2, 4, 6, 8],
+      [null, null, null, null, null],
+      [0, 2, 4, 6],
       [16, 2, 4, 6, 8],
     ])
       expect(
         measurementSchema("chiller").safeParse({ ...base, values }).success,
       ).toBe(false);
+  });
+  it("allows partial nulls without a missing reason", () => {
+    expect(
+      measurementSchema("chiller").parse({
+        ...base,
+        values: [null, 0, 2, 4, 6],
+      }).values[0],
+    ).toBeNull();
   });
   it("accepts decimal readings between visual marks", () =>
     expect(
@@ -36,14 +45,14 @@ describe("Form validation and integrity", () => {
         values: [1.8, 2, 4, 6, 8],
       }).success,
     ).toBe(true));
-  it("accepts freezer decimals and rejects hundredths/unconfirmed values", () => {
+  it("accepts freezer decimals and rejects hundredths/non-numeric values", () => {
     expect(
       measurementSchema("freezer").parse({
         ...base,
         values: [-18.5, -20.7, -17.3, -19.8],
       }).values,
     ).toEqual([-18.5, -20.7, -17.3, -19.8]);
-    for (const value of [1.85, 14.1, -2.1, null, "1,8", undefined])
+    for (const value of [1.85, 14.1, -2.1, "1,8", undefined])
       expect(
         measurementSchema("chiller").safeParse({
           ...base,
