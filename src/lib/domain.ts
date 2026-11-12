@@ -142,14 +142,13 @@ export function measurementSchema(kind: Kind) {
           message:
             "Identitas/nomor perangkat harus unik, berurutan dan sesuai pembacaan",
         });
-      input.values.forEach((value, index) => {
-        if (value === null && !input.devices?.[index]?.missingReason.trim())
-          ctx.addIssue({
-            code: "custom",
-            path: ["devices", index, "missingReason"],
-            message: "Alasan belum dilakukan pengukuran wajib diisi",
-          });
-      });
+      if (input.values.every((value) => value === null))
+        ctx.addIssue({
+          code: "custom",
+          path: ["values"],
+          message:
+            "Isi minimal satu pembacaan suhu untuk menyimpan pengukuran.",
+        });
     });
 }
 export type MeasurementInput = z.infer<ReturnType<typeof measurementSchema>>;

@@ -39,7 +39,7 @@ describe("Shared temperature policy", () => {
       "HIGH_TEMPERATURE",
     );
   });
-  it("requires explanations per device and preserves zero as filled", () => {
+  it("requires abnormal corrections, permits missing reasons and preserves zero as filled", () => {
     const devices = Array.from({ length: 5 }, emptyDeviceInput);
     const errors = validateDeviceInputs(
       "chiller",
@@ -47,7 +47,7 @@ describe("Shared temperature policy", () => {
       devices,
       policy,
     );
-    expect(errors.map((e) => e.deviceNumber)).toEqual([3, 4, 5]);
+    expect(errors.map((e) => e.deviceNumber)).toEqual([3, 4]);
     expect(
       validateDeviceInputs("freezer", [-15.5], [emptyDeviceInput()], policy),
     ).toEqual([]);

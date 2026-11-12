@@ -36,10 +36,7 @@ function request(
       date: "2026-11-04",
       time: "03:00",
       values,
-      devices: values.map((v) => ({
-        ...emptyDeviceInput(),
-        missingReason: v === null ? "Alat tidak beroperasi" : "",
-      })),
+      devices: values.map(emptyDeviceInput),
       notes: "DATA UJI",
       signatureId: crypto.randomUUID(),
     }),
@@ -158,3 +155,19 @@ it("rejects client-supplied officer or role rather than trusting it", async () =
   expect(res.status).toBe(400);
   expect(m.create).not.toHaveBeenCalled();
 });
+
+it.each(["chiller", "freezer"])(
+  "rejects an all-null %s session without requiring per-device reasons",
+  async (kind) => {
+    const res = await POST(
+      request(
+        kind,
+        Array.from({ length: kind === "chiller" ? 5 : 4 }, () => null),
+      ),
+      { params: Promise.resolve({ kind }) },
+    );
+    expect(res.status).toBe(400);
+    expect(m.create).not.toHaveBeenCalled();
+    expect(JSON.stringify(await res.json())).toContain("minimal satu");
+  },
+);

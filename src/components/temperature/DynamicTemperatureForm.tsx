@@ -125,7 +125,6 @@ export function DynamicTemperatureForm({
                     index={index}
                     deviceNumber={device.number}
                     value={value}
-                    incomplete={!parsed.valid}
                     type={kind}
                     policy={policy}
                     control={control}

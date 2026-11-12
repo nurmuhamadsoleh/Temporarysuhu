@@ -379,6 +379,10 @@ export function MeasurementForm({
             if (!parsed.valid) throw new Error(parsed.message);
             return parsed.value;
           });
+          if (numeric.every((value) => value === null))
+            throw new Error(
+              "Isi minimal satu pembacaan suhu untuk menyimpan pengukuran.",
+            );
           if (!registry.data)
             throw new Error("Daftar perangkat belum berhasil dimuat.");
           if (fields.deviceEntries.some((d) => !d.active) && !editing)
