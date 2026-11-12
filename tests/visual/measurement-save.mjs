@@ -52,7 +52,7 @@ const policy = {
   freezer: { min: -18, max: -10, warningMax: -8 },
 };
 const defaults = (kind) =>
-  Array.from({ length: kind === "chiller" ? 5 : 6 }, (_, i) => ({
+  Array.from({ length: kind === "chiller" ? 6 : 5 }, (_, i) => ({
     id: "default-" + kind + "-" + (i + 1),
     kind,
     number: i + 1,
@@ -272,7 +272,7 @@ try {
       state = await attach(page, kind, "PETUGAS");
     await page.goto(base + "/?kind=" + kind);
     const label = kind === "chiller" ? "Chiller" : "Freezer",
-      count = kind === "chiller" ? 5 : 6;
+      count = kind === "chiller" ? 6 : 5;
     await page.waitForFunction(
       (n) => document.querySelectorAll(".temperature-input-card").length === n,
       count,
@@ -280,6 +280,13 @@ try {
     await page.waitForFunction(
       () => !document.querySelector("input[id^=temperature-]").disabled,
     );
+    await doubleSubmit(page);
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Isi minimal satu pembacaan suhu" })
+      .waitFor();
+    assert.equal(state.uploads.length, 0);
+    assert.equal(state.saves.length, 0);
     assert.equal(await page.getByRole("slider").count(), 0);
     assert.equal(
       await page.locator(".ant-input-suffix").filter({ hasText: "°C" }).count(),
@@ -404,18 +411,11 @@ try {
     await page
       .getByLabel("Suhu " + label + " 2", { exact: true })
       .fill(kind === "chiller" ? "4.5" : "-9.9");
-    for (let i = 3; i <= count; i++) {
-      if (kind === "freezer" && i === 6) {
-        await page.getByLabel("Suhu Freezer 6", { exact: true }).fill("-7,9");
-        await page
-          .locator("#freezer-6-action")
-          .fill("TEST ONLY device 6 correction");
-        await page.locator("#freezer-6-by").fill("TEST ONLY performer");
-      } else
-        await page
-          .locator("#" + kind + "-" + i + "-reason")
-          .fill("TEST ONLY missing device " + i);
-    }
+    assert.equal(
+      await page.getByText("Alasan belum diukur", { exact: true }).count(),
+      0,
+    );
+    assert.equal(await page.locator('textarea[id$="-reason"]').count(), 0);
     await page
       .locator("textarea[name=notes]")
       .fill("TEST ONLY preserved input");
@@ -493,11 +493,59 @@ try {
       statusLive: true,
       petugasCannotRegister: true,
       nullAndCorrectionMapping: true,
+      noMissingReasonFields: true,
+      allNullSessionRejected: true,
       retryKeysAndImageStable: true,
       historyRefresh: true,
       passed: true,
     });
     await context.close();
+  }
+  {
+    const chillerContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+    });
+    const chillerPage = await chillerContext.newPage();
+    await attach(chillerPage, "chiller", "SUPER_ADMIN");
+    await chillerPage.goto(base + "/?kind=chiller&role=SUPER_ADMIN");
+    await chillerPage.waitForFunction(
+      () => !document.querySelector("fieldset").disabled,
+    );
+    await chillerPage
+      .getByRole("button", { name: "+ Tambah Input Chiller", exact: true })
+      .click();
+    const seventh = chillerPage.getByLabel("Suhu Chiller 7", { exact: true });
+    await seventh.fill("3,1");
+    const seventhId = await seventh.getAttribute("id");
+    await chillerPage
+      .locator(".temperature-input-card")
+      .filter({ has: seventh })
+      .getByText("NORMAL", { exact: true })
+      .waitFor();
+    await chillerPage
+      .getByRole("button", { name: "Daftarkan perangkat", exact: true })
+      .click();
+    await chillerPage.waitForFunction(
+      () => !document.querySelector("fieldset").disabled,
+    );
+    await chillerPage.reload();
+    await chillerPage.getByLabel("Suhu Chiller 7", { exact: true }).waitFor();
+    assert.equal(
+      await chillerPage
+        .getByLabel("Suhu Chiller 7", { exact: true })
+        .getAttribute("id"),
+      seventhId,
+    );
+    assert.equal(
+      await chillerPage.locator(".temperature-input-card").count(),
+      7,
+    );
+    result.chillerDynamic = {
+      seventhRegistered: true,
+      persistsAfterRefresh: true,
+      stableIdentity: true,
+    };
+    await chillerContext.close();
   }
   const context = await browser.newContext({
       viewport: { width: 390, height: 844 },
@@ -512,6 +560,7 @@ try {
     name: "+ Tambah Input Freezer",
     exact: true,
   });
+  await add.click();
   await add.click();
   await add.click();
   await page.getByLabel("Suhu Freezer 7", { exact: true }).fill("-13,5");
@@ -533,6 +582,14 @@ try {
     "TEST ONLY retained eighth identity",
   );
   await page
+    .locator(".temperature-input-card")
+    .filter({ has: page.getByLabel("Suhu Freezer 6", { exact: true }) })
+    .getByRole("button", { name: "Daftarkan perangkat", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => !document.querySelector("fieldset").disabled,
+  );
+  await page
     .getByRole("button", { name: "Daftarkan perangkat", exact: true })
     .click();
   await page.waitForFunction(
@@ -541,7 +598,7 @@ try {
   await page.waitForFunction(
     () => !document.querySelector("fieldset").disabled,
   );
-  assert.equal(state.registrations.length, 1);
+  assert.equal(state.registrations.length, 2);
   assert.equal(
     await page
       .getByRole("button", { name: "Hapus input freezer 7", exact: true })
@@ -571,7 +628,7 @@ try {
   );
   assert.equal(
     state.saves.at(-1).body.deviceRefs[6].id,
-    state.registrations[0].id,
+    state.registrations[1].id,
   );
   assert.equal(state.saves.at(-1).body.values[6], -13.5);
   await add.click();
@@ -593,10 +650,10 @@ try {
       !document.querySelector("fieldset").disabled &&
       document.querySelector("input[id^=temperature-]").value === "",
   );
-  assert.equal(state.registrations.length, 2);
+  assert.equal(state.registrations.length, 3);
   assert.equal(
     state.saves.at(-1).body.deviceRefs[7].id,
-    state.registrations[1].id,
+    state.registrations[2].id,
   );
   assert.equal(state.saves.at(-1).body.values[7], -13.5);
   const eighth = page
